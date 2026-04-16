@@ -2,7 +2,7 @@
 
 import html
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 # --- Color palettes ---------------------------------------------------------
@@ -21,11 +21,22 @@ DEFAULT_BG = "#1a1a1a"
 
 # Matches any ANSI escape sequence (SGR, cursor movement, OSC, etc.)
 _ANSI_RE = re.compile(
-    r"\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07]*\x07|\[[\x20-\x2f]*[\x40-\x7e])"
+    r"\x1b(?:\[[0-9;?<=>]*[A-Za-z]|\][^\x07]*\x07|\[[\x20-\x2f]*[\x40-\x7e])"
 )
 
 # Matches only SGR sequences (ESC [ ... m)
 _SGR_RE = re.compile(r"\x1b\[([0-9;]*)m")
+
+# --- 256-color palette constants --------------------------------------------
+
+_CUBE_START = 16          # First 256-color cube index
+_CUBE_SIZE = 216          # Number of cube colors (6*6*6)
+_CUBE_STEPS = 6           # Steps per channel
+_CUBE_CHANNEL_OFFSET = 55 # Xterm cube channel base for non-zero values
+_CUBE_CHANNEL_STEP = 40   # Xterm cube channel step
+_GRAYSCALE_START = 232    # First grayscale index
+_GRAYSCALE_BASE = 8       # First grayscale luminance value
+_GRAYSCALE_STEP = 10      # Grayscale luminance step
 
 # --- Color lookup -----------------------------------------------------------
 
@@ -33,18 +44,18 @@ def _color_256(index: int) -> str:
     """Return a CSS hex color string for a 256-color palette index."""
     if index < 16:
         return COLORS_16[index]
-    if index < 232:
+    if index < _GRAYSCALE_START:
         # 6x6x6 color cube: indices 16-231
-        cube_index = index - 16
-        b = cube_index % 6
-        g = (cube_index // 6) % 6
-        r = cube_index // 36
-        r_val = r * 51
-        g_val = g * 51
-        b_val = b * 51
+        cube_index = index - _CUBE_START
+        b = cube_index % _CUBE_STEPS
+        g = (cube_index // _CUBE_STEPS) % _CUBE_STEPS
+        r = cube_index // (_CUBE_STEPS * _CUBE_STEPS)
+        r_val = 0 if r == 0 else _CUBE_CHANNEL_OFFSET + r * _CUBE_CHANNEL_STEP
+        g_val = 0 if g == 0 else _CUBE_CHANNEL_OFFSET + g * _CUBE_CHANNEL_STEP
+        b_val = 0 if b == 0 else _CUBE_CHANNEL_OFFSET + b * _CUBE_CHANNEL_STEP
         return f"#{r_val:02x}{g_val:02x}{b_val:02x}"
     # Grayscale ramp: indices 232-255
-    value = 8 + (index - 232) * 10
+    value = _GRAYSCALE_BASE + (index - _GRAYSCALE_START) * _GRAYSCALE_STEP
     return f"#{value:02x}{value:02x}{value:02x}"
 
 # --- State ------------------------------------------------------------------
@@ -109,10 +120,6 @@ class _State:
             parts.append(f"background-color:{eff_bg}")
 
         return ";".join(parts)
-
-    def is_default(self) -> bool:
-        return self.css() == ""
-
 
 # --- SGR parameter processing -----------------------------------------------
 

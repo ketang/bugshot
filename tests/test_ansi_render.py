@@ -62,3 +62,9 @@ def test_non_sgr_sequences_stripped():
     assert result == "hello"
     result = ansi_to_html(f"{ESC}[5;10Hhello")
     assert result == "hello"
+
+
+def test_dec_private_mode_stripped():
+    """DEC private mode sequences like cursor hide/show should be stripped."""
+    result = ansi_to_html(f"{ESC}[?25lhidden cursor{ESC}[?25h")
+    assert result == "hidden cursor"
