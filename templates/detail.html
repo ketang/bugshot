@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bugshot — {{filename}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <nav class="detail-nav">
+            <a href="/" class="btn">Index</a>
+            <span class="nav-arrows">
+                <!-- Populated by gallery.js using nav data -->
+            </span>
+            <span class="filename">{{filename}}</span>
+        </nav>
+    </header>
+    <main class="detail-main">
+        <div class="detail-content">
+            <div id="image-container">
+                <!-- Image or ANSI content injected by gallery.js -->
+            </div>
+        </div>
+        <div class="comment-section">
+            <form id="comment-form">
+                <input type="text" id="comment-input" placeholder="Describe an issue..." autocomplete="off">
+                <button type="submit" class="btn">Submit</button>
+            </form>
+            <div id="comments-list">
+                <!-- Populated by gallery.js -->
+            </div>
+        </div>
+    </main>
+    <div class="shortcut-hint">&larr; &rarr; navigate &middot; c comment &middot; esc back</div>
+    <script>
+        window.__BUGSHOT_DETAIL__ = {
+            filename: "{{filename}}",
+            encodedName: "{{encoded_name}}",
+            contentType: "{{content_type}}",
+            imageSrc: "{{image_src}}",
+            ansiHtml: "{{ansi_html}}",
+            nav: {{nav_json}}
+        };
+    </script>
+    <script src="/static/gallery.js"></script>
+</body>
+</html>
