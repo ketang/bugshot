@@ -55,8 +55,6 @@ header h1 {
     background: #3a7a3a;
 }
 
-/* Index gallery */
-
 .gallery {
     display: grid;
     gap: 16px;
@@ -117,24 +115,28 @@ header h1 {
     white-space: nowrap;
 }
 
-/* Detail view */
-
 .detail-nav {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    gap: 12px;
     width: 100%;
 }
 
-.detail-nav .filename {
-    margin-left: auto;
-    color: #999;
-    font-size: 13px;
+.detail-nav-slot {
+    display: flex;
+    align-items: center;
 }
 
-.nav-arrows {
-    display: flex;
-    gap: 4px;
+.detail-nav-left {
+    justify-content: flex-start;
+}
+
+.detail-nav-center {
+    justify-content: center;
+}
+
+.detail-nav-right {
+    justify-content: flex-end;
 }
 
 .detail-main {
@@ -145,6 +147,15 @@ header h1 {
 
 .detail-content {
     margin-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#image-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
 }
 
 .detail-content img {
@@ -163,7 +174,13 @@ header h1 {
     line-height: 1.4;
 }
 
-/* Comments */
+.detail-filename {
+    margin-top: 12px;
+    color: #999;
+    font-size: 14px;
+    text-align: center;
+    word-break: break-word;
+}
 
 .comment-section {
     max-width: 800px;
@@ -188,6 +205,12 @@ header h1 {
 #comment-input:focus {
     outline: none;
     border-color: #888;
+}
+
+.detail-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 20px;
 }
 
 #comments-list {
@@ -231,11 +254,27 @@ header h1 {
     color: #e0e0e0;
 }
 
-/* Keyboard shortcut hint */
 .shortcut-hint {
     position: fixed;
     bottom: 12px;
     right: 12px;
     color: #555;
     font-size: 11px;
+}
+
+@media (max-width: 720px) {
+    .detail-nav {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+
+    .detail-nav-left,
+    .detail-nav-center,
+    .detail-nav-right {
+        justify-content: center;
+    }
+
+    #comment-form {
+        flex-direction: column;
+    }
 }
