@@ -1,191 +1,198 @@
 (function () {
     "use strict";
 
-    // ---- Constants ----
     var HEARTBEAT_INTERVAL_MS = 5000;
+    var INDEX_PATH = "/";
+    var SHORTCUT_KEY_SIZE = "s";
+    var SHORTCUT_KEY_NEXT = "n";
+    var SHORTCUT_KEY_PREVIOUS = "p";
+    var SHORTCUT_KEY_INDEX = "i";
+    var SHORTCUT_KEY_QUIT = "q";
+    var SHORTCUT_KEY_FOCUS_COMMENT = "/";
 
-    // ---- Page detection ----
     var isIndex = !!window.__BUGSHOT_IMAGES__;
     var isDetail = !!window.__BUGSHOT_DETAIL__;
     var detail = window.__BUGSHOT_DETAIL__ || null;
+    var isInternalNavigation = false;
 
-    // ---- Heartbeat ----
     setInterval(function () {
         fetch("/api/heartbeat", { method: "POST" }).catch(function () {});
     }, HEARTBEAT_INTERVAL_MS);
 
-    // ---- Browser close detection ----
     window.addEventListener("beforeunload", function () {
-        navigator.sendBeacon("/api/closed");
+        if (!isInternalNavigation) {
+            navigator.sendBeacon("/api/closed");
+        }
     });
 
-    // ---- Done button (index page) ----
-    var doneBtn = document.getElementById("done-btn");
-    if (doneBtn) {
-        doneBtn.addEventListener("click", function () {
-            if (confirm("Done reviewing? This will end the session.")) {
-                fetch("/api/done", { method: "POST" })
-                    .then(function () {
-                        document.body.textContent = "";
-                        var msg = document.createElement("div");
-                        msg.style.cssText =
-                            "display:flex;align-items:center;justify-content:center;" +
-                            "height:100vh;color:#e0e0e0;font-size:18px;";
-                        msg.textContent = "Session complete. You can close this tab.";
-                        document.body.appendChild(msg);
-                    });
-            }
-        });
-    }
+    bindDoneButton(document.getElementById("done-btn"));
+    bindDoneButton(document.getElementById("detail-done-btn"));
 
-    // ---- Index page ----
     if (isIndex) {
         initIndex();
     }
 
-    // ---- Detail page ----
     if (isDetail) {
         initDetail();
     }
 
-    // ---- Keyboard shortcuts ----
-    document.addEventListener("keydown", function (e) {
-        var isTyping = document.activeElement &&
-            (document.activeElement.tagName === "INPUT" ||
-             document.activeElement.tagName === "TEXTAREA");
+    document.addEventListener("keydown", function (event) {
+        var activeElement = document.activeElement;
+        var isTyping = activeElement &&
+            (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
 
         if (isTyping) {
-            if (e.key === "Escape") {
-                document.activeElement.blur();
-                e.preventDefault();
+            if (event.key === "Escape") {
+                activeElement.blur();
+                event.preventDefault();
             }
             return;
         }
 
-        if (isDetail) {
-            if (e.key === "ArrowLeft" && detail.nav.prev) {
-                window.location.href = detail.nav.prev;
-                e.preventDefault();
-            } else if (e.key === "ArrowRight" && detail.nav.next) {
-                window.location.href = detail.nav.next;
-                e.preventDefault();
-            } else if (e.key === "Escape") {
-                window.location.href = "/";
-                e.preventDefault();
-            } else if (e.key === "c") {
-                var input = document.getElementById("comment-input");
-                if (input) {
-                    input.focus();
-                    e.preventDefault();
-                }
+        if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
+            toggleIndexSize();
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_NEXT && isDetail && detail.nav.next) {
+            navigateTo(detail.nav.next);
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_PREVIOUS && isDetail && detail.nav.prev) {
+            navigateTo(detail.nav.prev);
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_INDEX) {
+            navigateTo(INDEX_PATH);
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_QUIT) {
+            if (confirm("Done reviewing? This will end the session.")) {
+                completeSession();
             }
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_FOCUS_COMMENT && isDetail) {
+            focusCommentInput();
+            event.preventDefault();
         }
     });
 
-    // ---- Index functions ----
+    function bindDoneButton(button) {
+        if (!button) {
+            return;
+        }
+
+        button.addEventListener("click", function () {
+            if (confirm("Done reviewing? This will end the session.")) {
+                completeSession();
+            }
+        });
+    }
+
+    function completeSession() {
+        fetch("/api/done", { method: "POST" })
+            .then(function () {
+                document.body.textContent = "";
+                var message = document.createElement("div");
+                message.style.cssText =
+                    "display:flex;align-items:center;justify-content:center;" +
+                    "height:100vh;color:#e0e0e0;font-size:18px;";
+                message.textContent = "Session complete. You can close this tab.";
+                document.body.appendChild(message);
+            });
+    }
 
     function initIndex() {
         var images = window.__BUGSHOT_IMAGES__;
         var gallery = document.getElementById("gallery");
-        var sizeToggle = document.getElementById("size-toggle");
 
-        // Render gallery items using DOM methods
-        images.forEach(function (img) {
+        images.forEach(function (imageInfo) {
             var item = document.createElement("a");
             item.className = "gallery-item";
-            item.href = "/view/" + img.encoded_name;
+            item.href = "/view/" + imageInfo.encoded_name;
+            bindInternalNavigation(item);
 
-            if (img.type === "image") {
-                var imgEl = document.createElement("img");
-                imgEl.src = img.src;
-                imgEl.alt = img.name;
-                item.appendChild(imgEl);
+            if (imageInfo.type === "image") {
+                var imageElement = document.createElement("img");
+                imageElement.src = imageInfo.src;
+                imageElement.alt = imageInfo.name;
+                item.appendChild(imageElement);
             } else {
-                // ANSI preview: server-rendered HTML from ansi_to_html(), safe to inject
                 var previewDiv = document.createElement("div");
                 previewDiv.className = "ansi-preview";
-                var pre = document.createElement("pre");
-                pre.innerHTML = img.preview_html;
-                previewDiv.appendChild(pre);
+                var previewPre = document.createElement("pre");
+                previewPre.innerHTML = imageInfo.preview_html;
+                previewDiv.appendChild(previewPre);
                 item.appendChild(previewDiv);
             }
 
             var label = document.createElement("div");
             label.className = "item-label";
-            label.textContent = img.name;
+            label.textContent = imageInfo.name;
             item.appendChild(label);
 
             gallery.appendChild(item);
         });
-
-        // Size toggle
-        var isFullSize = false;
-        sizeToggle.addEventListener("click", function () {
-            isFullSize = !isFullSize;
-            gallery.classList.toggle("thumbnail-mode", !isFullSize);
-            gallery.classList.toggle("fullsize-mode", isFullSize);
-            sizeToggle.textContent = isFullSize ? "Thumbnails" : "Full Size";
-        });
     }
-
-    // ---- Detail functions ----
 
     function initDetail() {
         var container = document.getElementById("image-container");
-        var navArrows = document.querySelector(".nav-arrows");
+        var previousSlot = document.getElementById("prev-slot");
+        var nextSlot = document.getElementById("next-slot");
+        var indexButton = document.getElementById("index-btn");
 
-        // Render image or ANSI content
         if (detail.contentType === "image") {
-            var img = document.createElement("img");
-            img.src = detail.imageSrc;
-            img.alt = detail.filename;
-            container.appendChild(img);
+            var imageElement = document.createElement("img");
+            imageElement.src = detail.imageSrc;
+            imageElement.alt = detail.filename;
+            container.appendChild(imageElement);
         } else {
-            // ANSI content: server-rendered HTML from ansi_to_html(), safe to inject
             var ansiDiv = document.createElement("div");
             ansiDiv.className = "ansi-rendered";
-            var pre = document.createElement("pre");
-            pre.innerHTML = detail.ansiHtml;
-            ansiDiv.appendChild(pre);
+            var ansiPre = document.createElement("pre");
+            ansiPre.innerHTML = detail.ansiHtml;
+            ansiDiv.appendChild(ansiPre);
             container.appendChild(ansiDiv);
         }
 
-        // Render nav arrows using DOM methods
         if (detail.nav.prev) {
-            var prevLink = document.createElement("a");
-            prevLink.href = detail.nav.prev;
-            prevLink.className = "btn";
-            prevLink.id = "prev-btn";
-            prevLink.textContent = "\u2190 " + detail.nav.prev_name;
-            navArrows.appendChild(prevLink);
+            var previousLink = document.createElement("a");
+            previousLink.href = detail.nav.prev;
+            previousLink.className = "btn";
+            previousLink.id = "prev-btn";
+            previousLink.textContent = "\u2190 " + detail.nav.prev_name;
+            bindInternalNavigation(previousLink);
+            previousSlot.appendChild(previousLink);
         }
+
         if (detail.nav.next) {
             var nextLink = document.createElement("a");
             nextLink.href = detail.nav.next;
             nextLink.className = "btn";
             nextLink.id = "next-btn";
             nextLink.textContent = detail.nav.next_name + " \u2192";
-            navArrows.appendChild(nextLink);
+            bindInternalNavigation(nextLink);
+            nextSlot.appendChild(nextLink);
         }
 
-        // ---- Comments ----
+        if (indexButton) {
+            bindInternalNavigation(indexButton);
+        }
+
         var commentForm = document.getElementById("comment-form");
         var commentInput = document.getElementById("comment-input");
         var commentsList = document.getElementById("comments-list");
 
         loadComments();
 
-        commentForm.addEventListener("submit", function (e) {
-            e.preventDefault();
+        commentForm.addEventListener("submit", function (event) {
+            event.preventDefault();
             var body = commentInput.value.trim();
-            if (!body) return;
+            if (!body) {
+                return;
+            }
 
             fetch("/api/comments", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ image: detail.filename, body: body }),
             })
-                .then(function (r) { return r.json(); })
+                .then(function (response) { return response.json(); })
                 .then(function (comment) {
                     commentInput.value = "";
                     appendComment(comment);
@@ -194,7 +201,7 @@
 
         function loadComments() {
             fetch("/api/comments?image=" + encodeURIComponent(detail.filename))
-                .then(function (r) { return r.json(); })
+                .then(function (response) { return response.json(); })
                 .then(function (comments) {
                     commentsList.textContent = "";
                     comments.forEach(appendComment);
@@ -206,34 +213,34 @@
             item.className = "comment-item";
             item.dataset.id = comment.id;
 
-            var bodyEl = document.createElement("span");
-            bodyEl.className = "comment-body";
-            bodyEl.textContent = comment.body;
+            var bodyElement = document.createElement("span");
+            bodyElement.className = "comment-body";
+            bodyElement.textContent = comment.body;
 
             var actions = document.createElement("span");
             actions.className = "comment-actions";
 
-            var editBtn = document.createElement("button");
-            editBtn.textContent = "edit";
-            editBtn.addEventListener("click", function () {
-                var newBody = prompt("Edit comment:", comment.body);
-                if (newBody !== null && newBody.trim()) {
+            var editButton = document.createElement("button");
+            editButton.textContent = "edit";
+            editButton.addEventListener("click", function () {
+                var nextBody = prompt("Edit comment:", comment.body);
+                if (nextBody !== null && nextBody.trim()) {
                     fetch("/api/comments/" + comment.id, {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ body: newBody.trim() }),
+                        body: JSON.stringify({ body: nextBody.trim() }),
                     })
-                        .then(function (r) { return r.json(); })
+                        .then(function (response) { return response.json(); })
                         .then(function (updated) {
-                            bodyEl.textContent = updated.body;
+                            bodyElement.textContent = updated.body;
                             comment.body = updated.body;
                         });
                 }
             });
 
-            var deleteBtn = document.createElement("button");
-            deleteBtn.textContent = "delete";
-            deleteBtn.addEventListener("click", function () {
+            var deleteButton = document.createElement("button");
+            deleteButton.textContent = "delete";
+            deleteButton.addEventListener("click", function () {
                 if (confirm("Delete this comment?")) {
                     fetch("/api/comments/" + comment.id, { method: "DELETE" })
                         .then(function () {
@@ -242,11 +249,44 @@
                 }
             });
 
-            actions.appendChild(editBtn);
-            actions.appendChild(deleteBtn);
-            item.appendChild(bodyEl);
+            actions.appendChild(editButton);
+            actions.appendChild(deleteButton);
+            item.appendChild(bodyElement);
             item.appendChild(actions);
             commentsList.appendChild(item);
+        }
+    }
+
+    function bindInternalNavigation(link) {
+        link.addEventListener("click", function () {
+            isInternalNavigation = true;
+        });
+    }
+
+    function navigateTo(path) {
+        isInternalNavigation = true;
+        window.location.href = path;
+    }
+
+    function toggleIndexSize() {
+        if (!isIndex) {
+            return;
+        }
+
+        var gallery = document.getElementById("gallery");
+        var sizeToggle = document.getElementById("size-toggle");
+        var isFullSize = gallery.classList.contains("fullsize-mode");
+        var nextFullSizeState = !isFullSize;
+
+        gallery.classList.toggle("thumbnail-mode", !nextFullSizeState);
+        gallery.classList.toggle("fullsize-mode", nextFullSizeState);
+        sizeToggle.textContent = nextFullSizeState ? "Thumbnails" : "Full Size";
+    }
+
+    function focusCommentInput() {
+        var input = document.getElementById("comment-input");
+        if (input) {
+            input.focus();
         }
     }
 })();

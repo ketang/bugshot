@@ -9,11 +9,15 @@
 <body>
     <header>
         <nav class="detail-nav">
-            <a href="/" class="btn">Index</a>
-            <span class="nav-arrows">
-                <!-- Populated by gallery.js using nav data -->
-            </span>
-            <span class="filename">{{filename}}</span>
+            <div class="detail-nav-slot detail-nav-left">
+                <span id="prev-slot"></span>
+            </div>
+            <div class="detail-nav-slot detail-nav-center">
+                <a href="/" class="btn" id="index-btn">Index</a>
+            </div>
+            <div class="detail-nav-slot detail-nav-right">
+                <span id="next-slot"></span>
+            </div>
         </nav>
     </header>
     <main class="detail-main">
@@ -21,6 +25,7 @@
             <div id="image-container">
                 <!-- Image or ANSI content injected by gallery.js -->
             </div>
+            <div class="detail-filename">{{filename}}</div>
         </div>
         <div class="comment-section">
             <form id="comment-form">
@@ -31,8 +36,11 @@
                 <!-- Populated by gallery.js -->
             </div>
         </div>
+        <div class="detail-actions">
+            <button id="detail-done-btn" class="btn btn-done">Done Reviewing</button>
+        </div>
     </main>
-    <div class="shortcut-hint">&larr; &rarr; navigate &middot; c comment &middot; esc back</div>
+    <div class="shortcut-hint">s size · n next · p previous · i index · q quit · / comment</div>
     <script>
         window.__BUGSHOT_DETAIL__ = {
             filename: "{{filename}}",
