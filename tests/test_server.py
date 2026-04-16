@@ -148,3 +148,46 @@ def test_delete_nonexistent_comment(server):
     url, info, proc = server
     status = _delete(f"{url}/api/comments/999")
     assert status == 404
+
+
+def test_heartbeat(server):
+    url, info, proc = server
+    status, body = _post_json(f"{url}/api/heartbeat", {})
+    assert status == 200
+    assert body["ok"] is True
+
+
+def test_status_initially_not_done(server):
+    url, info, proc = server
+    status, body = _get_json(f"{url}/api/status")
+    assert status == 200
+    assert body["done"] is False
+    assert body["reason"] is None
+
+
+def test_done_button(server):
+    url, info, proc = server
+    _post_json(f"{url}/api/done", {})
+
+    status, body = _get_json(f"{url}/api/status")
+    assert body["done"] is True
+    assert body["reason"] == "button"
+
+
+def test_closed_signal(server):
+    url, info, proc = server
+    _post_json(f"{url}/api/closed", {})
+
+    status, body = _get_json(f"{url}/api/status")
+    assert body["done"] is True
+    assert body["reason"] == "closed"
+
+
+def test_heartbeat_keeps_session_alive(server):
+    url, info, proc = server
+    # Send a heartbeat
+    _post_json(f"{url}/api/heartbeat", {})
+
+    # Immediately check status — should not be timed out
+    status, body = _get_json(f"{url}/api/status")
+    assert body["done"] is False
