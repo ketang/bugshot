@@ -62,3 +62,61 @@ def test_non_sgr_sequences_stripped():
     assert result == "hello"
     result = ansi_to_html(f"{ESC}[5;10Hhello")
     assert result == "hello"
+
+
+def test_fg_red():
+    result = ansi_to_html(f"{ESC}[31mred{ESC}[0m")
+    assert "color:#c91b00" in result
+    assert "red" in result
+
+
+def test_bg_green():
+    result = ansi_to_html(f"{ESC}[42mgreenbg{ESC}[0m")
+    assert "background-color:#00c200" in result
+
+
+def test_bright_fg():
+    result = ansi_to_html(f"{ESC}[91mbright red{ESC}[0m")
+    assert "color:#ff6e67" in result
+
+
+def test_bright_bg():
+    result = ansi_to_html(f"{ESC}[102mbright green bg{ESC}[0m")
+    assert "background-color:#5ffa68" in result
+
+
+def test_256_color_fg():
+    result = ansi_to_html(f"{ESC}[38;5;196mred256{ESC}[0m")
+    assert "color:#ff0000" in result
+
+
+def test_256_color_bg():
+    result = ansi_to_html(f"{ESC}[48;5;21mblue256{ESC}[0m")
+    assert "background-color:#0000ff" in result
+
+
+def test_256_grayscale():
+    result = ansi_to_html(f"{ESC}[38;5;240mgray{ESC}[0m")
+    assert "color:#58" in result  # 8 + (240-232)*10 = 88 = 0x58
+
+
+def test_truecolor_fg():
+    result = ansi_to_html(f"{ESC}[38;2;255;128;0morange{ESC}[0m")
+    assert "color:#ff8000" in result
+
+
+def test_truecolor_bg():
+    result = ansi_to_html(f"{ESC}[48;2;0;0;128mnavybg{ESC}[0m")
+    assert "background-color:#000080" in result
+
+
+def test_default_fg_reset():
+    result = ansi_to_html(f"{ESC}[31mred{ESC}[39mdefault")
+    assert "default" in result
+
+
+def test_combined_attributes():
+    result = ansi_to_html(f"{ESC}[1;31;42mboldredgreen{ESC}[0m")
+    assert "font-weight:bold" in result
+    assert "color:#c91b00" in result
+    assert "background-color:#00c200" in result
