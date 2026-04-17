@@ -1,0 +1,47 @@
+{
+  "name": "bugshot",
+  "version": "1.0.0",
+  "description": "Ephemeral screenshot gallery for visual bug review and issue filing",
+  "author": {
+    "name": "Ketan Gangatirkar",
+    "email": "ketan@gangatirkar.com",
+    "url": "https://github.com/ketang"
+  },
+  "homepage": "https://github.com/ketang/bugshot",
+  "repository": "https://github.com/ketang/bugshot",
+  "license": "MIT",
+  "keywords": [
+    "screenshots",
+    "bugs",
+    "issues",
+    "visual-review",
+    "qa"
+  ],
+  "skills": ".",
+  "interface": {
+    "displayName": "Bugshot",
+    "shortDescription": "Visual bug review and issue filing",
+    "longDescription": "Bugshot launches a local screenshot gallery in your browser. Review screenshots, type comments on any issues you spot, and let the agent compose and file them as issues in your tracker \u2014 all in one session with zero external dependencies.",
+    "developerName": "Ketan Gangatirkar",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ketang/bugshot",
+    "privacyPolicyURL": "https://github.com/ketang/bugshot",
+    "termsOfServiceURL": "https://github.com/ketang/bugshot",
+    "defaultPrompt": [
+      "Run bugshot on my screenshots directory and help me file issues for what you find.",
+      "Launch the bugshot gallery on ~/Desktop/screenshots and file any bugs as GitHub issues."
+    ],
+    "brandColor": "#2090C8",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "screenshots": [
+      "./assets/screenshot-1.png",
+      "./assets/screenshot-2.png",
+      "./assets/screenshot-3.png"
+    ]
+  }
+}

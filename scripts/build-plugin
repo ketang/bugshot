@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+
+import json
+import struct
+import sys
+import zlib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+VERSION_FILE = ROOT / "plugin-version.json"
+
+PLUGIN_NAME = "bugshot"
+DESCRIPTION = "Ephemeral screenshot gallery for visual bug review and issue filing"
+DISPLAY_NAME = "Bugshot"
+SHORT_DESCRIPTION = "Visual bug review and issue filing"
+LONG_DESCRIPTION = (
+    "Bugshot launches a local screenshot gallery in your browser. Review screenshots, "
+    "type comments on any issues you spot, and let the agent compose and file them as "
+    "issues in your tracker — all in one session with zero external dependencies."
+)
+OWNER_NAME = "Ketan Gangatirkar"
+OWNER_EMAIL = "ketan@gangatirkar.com"
+OWNER_URL = "https://github.com/ketang"
+REPO_URL = "https://github.com/ketang/bugshot"
+LICENSE = "MIT"
+KEYWORDS = ["screenshots", "bugs", "issues", "visual-review", "qa"]
+CATEGORY = "Coding"
+CAPABILITIES = ["Interactive", "Write"]
+DEFAULT_PROMPTS = [
+    "Run bugshot on my screenshots directory and help me file issues for what you find.",
+    "Launch the bugshot gallery on ~/Desktop/screenshots and file any bugs as GitHub issues.",
+]
+BRAND_COLOR = "#2090C8"
+PALETTE = {
+    "primary": (32, 144, 200),
+    "secondary": (40, 200, 160),
+    "accent": (240, 100, 60),
+    "background": (10, 14, 24),
+    "surface": (20, 28, 48),
+}
+
+
+def read_version() -> str:
+    return json.loads(VERSION_FILE.read_text())["version"]
+
+
+def bump_version(version: str) -> str:
+    parts = version.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return ".".join(parts)
+
+
+def write_json(path: Path, data: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def claude_manifest(version: str) -> dict:
+    return {
+        "name": PLUGIN_NAME,
+        "description": DESCRIPTION,
+        "version": version,
+        "author": {"name": OWNER_NAME},
+    }
+
+
+def codex_manifest(version: str) -> dict:
+    return {
+        "name": PLUGIN_NAME,
+        "version": version,
+        "description": DESCRIPTION,
+        "author": {"name": OWNER_NAME, "email": OWNER_EMAIL, "url": OWNER_URL},
+        "homepage": REPO_URL,
+        "repository": REPO_URL,
+        "license": LICENSE,
+        "keywords": KEYWORDS,
+        "skills": ".",
+        "interface": {
+            "displayName": DISPLAY_NAME,
+            "shortDescription": SHORT_DESCRIPTION,
+            "longDescription": LONG_DESCRIPTION,
+            "developerName": OWNER_NAME,
+            "category": CATEGORY,
+            "capabilities": CAPABILITIES,
+            "websiteURL": REPO_URL,
+            "privacyPolicyURL": REPO_URL,
+            "termsOfServiceURL": REPO_URL,
+            "defaultPrompt": DEFAULT_PROMPTS,
+            "brandColor": BRAND_COLOR,
+            "composerIcon": "./assets/icon.png",
+            "logo": "./assets/logo.png",
+            "screenshots": [
+                "./assets/screenshot-1.png",
+                "./assets/screenshot-2.png",
+                "./assets/screenshot-3.png",
+            ],
+        },
+    }
+
+
+def write_png(path: Path, width: int, height: int, pixels: bytearray) -> None:
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    raw = bytearray()
+    stride = width * 3
+    for row in range(height):
+        raw.append(0)
+        raw.extend(pixels[row * stride : row * stride + stride])
+
+    payload = bytearray(b"\x89PNG\r\n\x1a\n")
+    payload.extend(chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)))
+    payload.extend(chunk(b"IDAT", zlib.compress(bytes(raw), level=9)))
+    payload.extend(chunk(b"IEND", b""))
+    path.write_bytes(bytes(payload))
+
+
+def fill_gradient(pixels: bytearray, w: int, h: int, top: tuple, bottom: tuple) -> None:
+    for y in range(h):
+        t = y / max(h - 1, 1)
+        r, g, b = (int(top[i] * (1 - t) + bottom[i] * t) for i in range(3))
+        for x in range(w):
+            o = (y * w + x) * 3
+            pixels[o], pixels[o + 1], pixels[o + 2] = r, g, b
+
+
+def draw_rect(pixels: bytearray, w: int, h: int, x: int, y: int, rw: int, rh: int, c: tuple) -> None:
+    for py in range(max(y, 0), min(y + rh, h)):
+        for px in range(max(x, 0), min(x + rw, w)):
+            o = (py * w + px) * 3
+            pixels[o], pixels[o + 1], pixels[o + 2] = c
+
+
+def draw_circle(pixels: bytearray, w: int, h: int, cx: int, cy: int, r: int, c: tuple) -> None:
+    for py in range(max(cy - r, 0), min(cy + r, h - 1) + 1):
+        for px in range(max(cx - r, 0), min(cx + r, w - 1) + 1):
+            if (px - cx) ** 2 + (py - cy) ** 2 <= r * r:
+                o = (py * w + px) * 3
+                pixels[o], pixels[o + 1], pixels[o + 2] = c
+
+
+def blend_overlay(pixels: bytearray, w: int, h: int, c: tuple, step: int, num: int, den: int) -> None:
+    for y in range(h):
+        for x in range(w):
+            if (x + y) % step != 0:
+                continue
+            o = (y * w + x) * 3
+            pixels[o] = (pixels[o] * (den - num) + c[0] * num) // den
+            pixels[o + 1] = (pixels[o + 1] * (den - num) + c[1] * num) // den
+            pixels[o + 2] = (pixels[o + 2] * (den - num) + c[2] * num) // den
+
+
+def make_icon(path: Path) -> None:
+    w = h = 256
+    p = PALETTE
+    px = bytearray(w * h * 3)
+    fill_gradient(px, w, h, p["background"], p["surface"])
+    draw_rect(px, w, h, 40, 80, 176, 116, p["primary"])    # camera body
+    draw_rect(px, w, h, 80, 60, 48, 24, p["primary"])       # viewfinder bump
+    draw_circle(px, w, h, 128, 136, 44, p["surface"])        # lens outer
+    draw_circle(px, w, h, 128, 136, 30, p["secondary"])      # lens inner
+    draw_circle(px, w, h, 180, 176, 18, p["accent"])         # bug dot
+    blend_overlay(px, w, h, (255, 255, 255), 11, 1, 8)
+    write_png(path, w, h, px)
+
+
+def make_logo(path: Path) -> None:
+    w, h = 1200, 675
+    p = PALETTE
+    px = bytearray(w * h * 3)
+    fill_gradient(px, w, h, p["background"], p["surface"])
+    draw_rect(px, w, h, 72, 80, 500, 515, p["surface"])      # screenshot canvas
+    draw_rect(px, w, h, 72, 80, 500, 36, p["primary"])        # titlebar
+    for i in range(3):                                         # thumbnail strip
+        draw_rect(px, w, h, 600 + i * 190, 80, 164, 164, p["secondary"] if i == 1 else p["surface"])
+    draw_circle(px, w, h, 200, 300, 24, p["accent"])           # bug markers
+    draw_circle(px, w, h, 350, 450, 16, p["accent"])
+    blend_overlay(px, w, h, (255, 255, 255), 19, 1, 12)
+    write_png(path, w, h, px)
+
+
+def make_screenshot(path: Path, variant: int) -> None:
+    w, h = 1440, 900
+    p = PALETTE
+    px = bytearray(w * h * 3)
+    fill_gradient(px, w, h, p["background"], p["surface"])
+    sidebar_w = 200 + variant * 20
+    draw_rect(px, w, h, 0, 0, sidebar_w, h, p["primary"])     # sidebar
+    thumb_w = (w - sidebar_w - 100) // 3
+    for col in range(3):                                        # thumbnail grid
+        x = sidebar_w + 36 + col * (thumb_w + 16)
+        draw_rect(px, w, h, x, 80, thumb_w, thumb_w * 3 // 4, p["surface"])
+        if (col + variant) % 2 == 0:
+            draw_circle(px, w, h, x + thumb_w - 24, 104, 16, p["accent"])
+    draw_rect(px, w, h, sidebar_w + 36, h - 200, w - sidebar_w - 72, 160, p["surface"])  # comment panel
+    blend_overlay(px, w, h, (255, 255, 255), 17 - min(variant, 2) * 2, 1, 10)
+    write_png(path, w, h, px)
+
+
+def write_assets() -> None:
+    assets = ROOT / "assets"
+    assets.mkdir(exist_ok=True)
+    make_icon(assets / "icon.png")
+    make_logo(assets / "logo.png")
+    for v in range(1, 4):
+        make_screenshot(assets / f"screenshot-{v}.png", v)
+
+
+def main() -> None:
+    bump = "--bump" in sys.argv
+    version = read_version()
+    if bump:
+        version = bump_version(version)
+        write_json(VERSION_FILE, {"version": version})
+        print(f"Bumped to {version}")
+    write_json(ROOT / ".claude-plugin" / "plugin.json", claude_manifest(version))
+    write_json(ROOT / ".codex-plugin" / "plugin.json", codex_manifest(version))
+    write_assets()
+    print(f"Built plugin v{version}")
+
+
+if __name__ == "__main__":
+    main()
