@@ -13,16 +13,12 @@ import urllib.request
 import webbrowser
 from dataclasses import dataclass
 
-from bugshot_tracker import AttachmentNotSupportedError, IssueTracker
-
 DEFAULT_BIND_ADDRESS = "127.0.0.1"
 DEFAULT_BROWSER_OPEN_ENABLED = False
 DEFAULT_POLL_INTERVAL_SECONDS = 0.2
 HTTP_SUCCESS_STATUS = 200
-TITLE_SEPARATOR = ": "
-TITLE_MAXIMUM_LENGTH = 72
-TITLE_SUFFIX_LENGTH = 3
 ISSUE_DIVIDER = "------------------------------------------------------------"
+NEGATIVE_RESPONSES = {"n", "no"}
 
 
 class ShellIO:
@@ -58,13 +54,11 @@ class ShellIO:
 
 @dataclass
 class ReviewSummary:
-    filed_count: int
-    skipped_count: int
+    draft_count: int
 
 
 def run_review_session(
     screenshot_dir: str,
-    tracker: IssueTracker,
     io: ShellIO,
     bind_address: str = DEFAULT_BIND_ADDRESS,
     open_browser: bool = DEFAULT_BROWSER_OPEN_ENABLED,
@@ -86,23 +80,10 @@ def run_review_session(
             "you see, then click \"Done Reviewing\" when finished."
         )
 
-        completion_reason = _wait_for_completion(gallery_url, io, poll_interval_seconds)
-        if completion_reason in {"timeout", "closed"}:
-            should_continue = io.confirm(
-                f'Gallery session ended with reason "{completion_reason}". '
-                "Continue processing comments? [Y/n]: ",
-                default=True,
-            )
-            if not should_continue:
-                io.write("Review cancelled before filing issues.")
-                return 0
-
+        _wait_for_completion(gallery_url, io, poll_interval_seconds)
         comments = _fetch_comments(gallery_url)
-        summary = _process_comments(comments, screenshot_dir, tracker, io)
-        io.write(
-            f"Bugshot session complete. Filed {summary.filed_count} issues, "
-            f"skipped {summary.skipped_count}."
-        )
+        summary = _process_comments(comments, screenshot_dir, io)
+        io.write(f"Bugshot session complete. Produced {summary.draft_count} issue drafts.")
         return 0
     finally:
         _stop_server(server_process)
@@ -171,73 +152,28 @@ def _fetch_comments(gallery_url: str) -> list[dict[str, object]]:
 def _process_comments(
     comments: list[dict[str, object]],
     screenshot_dir: str,
-    tracker: IssueTracker,
     io: ShellIO,
 ) -> ReviewSummary:
     if not comments:
         io.write("No comments were submitted.")
-        return ReviewSummary(filed_count=0, skipped_count=0)
+        return ReviewSummary(draft_count=0)
 
-    filed_count = 0
-    skipped_count = 0
+    draft_count = 0
 
     for comment in comments:
-        title = _compose_title(comment)
-        body = _compose_body(comment)
-        screenshot_path = os.path.join(screenshot_dir, comment["image"])
-        duplicate_matches = tracker.search_issues(f"{title}\n{body}")
-
-        if duplicate_matches:
-            io.write(f"Found potential duplicates for {comment['image']}:")
-            for match in duplicate_matches:
-                io.write(f"- #{match.id}: {match.title}")
+        image_name = comment["image"]
+        image_path = os.path.join(os.path.abspath(screenshot_dir), image_name)
+        user_comment = comment["body"]
 
         io.write("")
         io.write(ISSUE_DIVIDER)
-        io.write(f"Issue for {comment['image']}:")
-        io.write(title)
-        io.write(body)
+        io.write(f"Image name: {image_name}")
+        io.write(f"Image path: {image_path}")
+        io.write(f"User comment: {user_comment}")
         io.write("")
+        draft_count += 1
 
-        issue = tracker.create_issue(title, body)
-        try:
-            tracker.attach_file(issue.id, screenshot_path)
-        except AttachmentNotSupportedError:
-            io.write(
-                f"Note: Could not attach screenshot to #{issue.id} "
-                "(attachment not supported by tracker)."
-            )
-        io.write(f"Filed: #{issue.id} - {issue.title}")
-        filed_count += 1
-
-    return ReviewSummary(filed_count=filed_count, skipped_count=skipped_count)
-
-
-def _compose_title(comment: dict[str, object]) -> str:
-    image_stem = os.path.splitext(comment["image"])[0].replace("-", " ")
-    prefix = image_stem.strip().title()
-    suffix = comment["body"].strip()
-    candidate = f"{prefix}{TITLE_SEPARATOR}{suffix}"
-    if len(candidate) <= TITLE_MAXIMUM_LENGTH:
-        return candidate
-    truncated_length = TITLE_MAXIMUM_LENGTH - TITLE_SUFFIX_LENGTH
-    return f"{candidate[:truncated_length]}..."
-
-
-def _compose_body(comment: dict[str, object]) -> str:
-    return "\n".join(
-        [
-            "## Current Behavior",
-            comment["body"],
-            "",
-            "## Screenshot Description",
-            f"Screenshot under review: {comment['image']}",
-            "",
-            "## Additional Context",
-            f"- Screenshot: {comment['image']}",
-            f'- User comment: "{comment["body"]}"',
-        ]
-    )
+    return ReviewSummary(draft_count=draft_count)
 
 
 def _get_json(url: str) -> dict[str, object] | list[dict[str, object]]:

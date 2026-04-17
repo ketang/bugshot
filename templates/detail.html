@@ -21,6 +21,7 @@
         </nav>
     </header>
     <main class="detail-main">
+        <div class="detail-shortcut-legend">1-9 jump · 0 last · g go to # · s size · n next · p previous · i index · q quit · / comment · Esc unfocus</div>
         <div class="detail-content">
             <div id="image-container">
                 <!-- Image or ANSI content injected by gallery.js -->
@@ -40,7 +41,6 @@
             <button id="detail-done-btn" class="btn btn-done">Done Reviewing</button>
         </div>
     </main>
-    <div class="shortcut-hint">s size · n next · p previous · i index · q quit · / comment</div>
     <script>
         window.__BUGSHOT_DETAIL__ = {
             filename: "{{filename}}",
@@ -48,6 +48,7 @@
             contentType: "{{content_type}}",
             imageSrc: "{{image_src}}",
             ansiHtml: "{{ansi_html}}",
+            images: {{images_json}},
             nav: {{nav_json}}
         };
     </script>

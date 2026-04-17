@@ -65,19 +65,6 @@ def repo_root():
 
 
 @pytest.fixture
-def mock_tracker_state_file():
-    fd, path = tempfile.mkstemp(prefix="bugshot_tracker_", suffix=".json")
-    os.close(fd)
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump({"supports_attachments": True, "issues": []}, handle)
-
-    yield path
-
-    if os.path.exists(path):
-        os.unlink(path)
-
-
-@pytest.fixture
 def server(screenshot_dir):
     """Start the gallery server and yield (url, info, process)."""
     proc = subprocess.Popen(
