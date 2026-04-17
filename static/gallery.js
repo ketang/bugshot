@@ -10,11 +10,16 @@
     var SHORTCUT_KEY_QUIT = "q";
     var SHORTCUT_KEY_FOCUS_COMMENT = "/";
     var SHORTCUT_KEY_ENTER = "Enter";
+    var SHORTCUT_KEY_GO_TO = "g";
+    var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
     var isIndex = !!window.__BUGSHOT_IMAGES__;
     var isDetail = !!window.__BUGSHOT_DETAIL__;
     var detail = window.__BUGSHOT_DETAIL__ || null;
     var isInternalNavigation = false;
+    var jumpModal = null;
+    var jumpModalInput = null;
+    var jumpModalError = null;
 
     setInterval(function () {
         fetch("/api/heartbeat", { method: "POST" }).catch(function () {});
@@ -37,7 +42,14 @@
         initDetail();
     }
 
+    initJumpModal();
+
     document.addEventListener("keydown", function (event) {
+        if (isJumpModalOpen()) {
+            handleJumpModalKeydown(event);
+            return;
+        }
+
         var activeElement = document.activeElement;
         var isTyping = activeElement &&
             (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
@@ -53,6 +65,9 @@
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
             event.preventDefault();
+        } else if (DIGIT_KEYS.indexOf(event.key) !== -1) {
+            navigateToImageByShortcut(event.key);
+            event.preventDefault();
         } else if ((event.key === SHORTCUT_KEY_NEXT || event.key === SHORTCUT_KEY_ENTER) && isIndex) {
             navigateToFirstImage();
             event.preventDefault();
@@ -64,6 +79,9 @@
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_PREVIOUS && isDetail && detail.nav.prev) {
             navigateTo(detail.nav.prev);
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_GO_TO) {
+            openJumpModal();
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_INDEX) {
             navigateTo(INDEX_PATH);
@@ -88,6 +106,36 @@
             if (confirm("Done reviewing? This will end the session.")) {
                 completeSession();
             }
+        });
+    }
+
+    function initJumpModal() {
+        jumpModal = document.createElement("div");
+        jumpModal.className = "jump-modal is-hidden";
+        jumpModal.innerHTML =
+            '<div class="jump-modal-card" role="dialog" aria-modal="true" aria-labelledby="jump-modal-title">' +
+            '<div class="jump-modal-title" id="jump-modal-title">Go to image</div>' +
+            '<div class="jump-modal-copy">Type any image number and press Enter.</div>' +
+            '<form class="jump-modal-form" id="jump-modal-form">' +
+            '<input class="jump-modal-input" id="jump-modal-input" inputmode="numeric" autocomplete="off" />' +
+            '<button type="submit" class="btn">Go</button>' +
+            "</form>" +
+            '<div class="jump-modal-error" id="jump-modal-error"></div>' +
+            "</div>";
+        document.body.appendChild(jumpModal);
+
+        jumpModalInput = document.getElementById("jump-modal-input");
+        jumpModalError = document.getElementById("jump-modal-error");
+
+        jumpModal.addEventListener("click", function (event) {
+            if (event.target === jumpModal) {
+                closeJumpModal();
+            }
+        });
+
+        document.getElementById("jump-modal-form").addEventListener("submit", function (event) {
+            event.preventDefault();
+            submitJumpModal();
         });
     }
 
@@ -140,24 +188,15 @@
     }
 
     function navigateToFirstImage() {
-        if (!isIndex) {
-            return;
-        }
-
-        var images = window.__BUGSHOT_IMAGES__;
+        var images = getAvailableImages();
         if (!images.length) {
             return;
         }
-
         navigateTo("/view/" + images[0].encoded_name);
     }
 
     function navigateToLastImage() {
-        if (!isIndex) {
-            return;
-        }
-
-        var images = window.__BUGSHOT_IMAGES__;
+        var images = getAvailableImages();
         if (!images.length) {
             return;
         }
@@ -326,6 +365,97 @@
     function navigateTo(path) {
         isInternalNavigation = true;
         window.location.href = path;
+    }
+
+    function getAvailableImages() {
+        if (isIndex) {
+            return window.__BUGSHOT_IMAGES__ || [];
+        }
+        if (isDetail) {
+            return detail.images || [];
+        }
+        return [];
+    }
+
+    function navigateToImageByShortcut(key) {
+        var images = getAvailableImages();
+        if (!images.length) {
+            return;
+        }
+
+        if (key === "0") {
+            navigateTo("/view/" + images[images.length - 1].encoded_name);
+            return;
+        }
+
+        var imageNumber = parseInt(key, 10);
+        navigateToImageNumber(imageNumber);
+    }
+
+    function navigateToImageNumber(imageNumber) {
+        var images = getAvailableImages();
+        if (!images.length) {
+            return false;
+        }
+        if (!Number.isInteger(imageNumber) || imageNumber < 1 || imageNumber > images.length) {
+            return false;
+        }
+
+        navigateTo("/view/" + images[imageNumber - 1].encoded_name);
+        return true;
+    }
+
+    function isJumpModalOpen() {
+        return jumpModal && !jumpModal.classList.contains("is-hidden");
+    }
+
+    function openJumpModal() {
+        if (!jumpModal) {
+            return;
+        }
+        jumpModal.classList.remove("is-hidden");
+        jumpModalInput.value = "";
+        jumpModalError.textContent = "";
+        jumpModalInput.focus();
+        jumpModalInput.select();
+    }
+
+    function closeJumpModal() {
+        if (!jumpModal) {
+            return;
+        }
+        jumpModal.classList.add("is-hidden");
+        jumpModalError.textContent = "";
+    }
+
+    function submitJumpModal() {
+        var rawValue = jumpModalInput.value.trim();
+        var imageNumber = parseInt(rawValue, 10);
+
+        if (!rawValue || !/^\d+$/.test(rawValue)) {
+            jumpModalError.textContent = "Enter a valid image number.";
+            return;
+        }
+
+        if (!navigateToImageNumber(imageNumber)) {
+            jumpModalError.textContent = "That image number does not exist.";
+            return;
+        }
+    }
+
+    function handleJumpModalKeydown(event) {
+        if (event.key === "Escape") {
+            closeJumpModal();
+            event.preventDefault();
+            return;
+        }
+
+        if (event.key !== SHORTCUT_KEY_ENTER) {
+            return;
+        }
+
+        submitJumpModal();
+        event.preventDefault();
     }
 
     function toggleIndexSize() {

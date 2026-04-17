@@ -176,6 +176,13 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "prev_name": prev_name,
             "next_name": next_name,
         }
+        detail_images = [
+            {
+                "name": image_name,
+                "encoded_name": urllib.parse.quote(image_name),
+            }
+            for image_name in self.images
+        ]
 
         replacements = {
             "{{filename}}": filename,
@@ -183,6 +190,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "{{image_src}}": image_src,
             "{{ansi_html}}": rendered_html,
             "{{nav_json}}": json.dumps(nav),
+            "{{images_json}}": json.dumps(detail_images),
             "{{encoded_name}}": encoded_name,
         }
         content = template
