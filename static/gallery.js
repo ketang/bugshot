@@ -9,6 +9,7 @@
     var SHORTCUT_KEY_INDEX = "i";
     var SHORTCUT_KEY_QUIT = "q";
     var SHORTCUT_KEY_FOCUS_COMMENT = "/";
+    var SHORTCUT_KEY_ENTER = "Enter";
 
     var isIndex = !!window.__BUGSHOT_IMAGES__;
     var isDetail = !!window.__BUGSHOT_DETAIL__;
@@ -52,6 +53,12 @@
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
             event.preventDefault();
+        } else if ((event.key === SHORTCUT_KEY_NEXT || event.key === SHORTCUT_KEY_ENTER) && isIndex) {
+            navigateToFirstImage();
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_PREVIOUS && isIndex) {
+            navigateToLastImage();
+            event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_NEXT && isDetail && detail.nav.next) {
             navigateTo(detail.nav.next);
             event.preventDefault();
@@ -87,6 +94,8 @@
     function completeSession() {
         fetch("/api/done", { method: "POST" })
             .then(function () {
+                window.close();
+
                 document.body.textContent = "";
                 var message = document.createElement("div");
                 message.style.cssText =
@@ -130,6 +139,32 @@
         });
     }
 
+    function navigateToFirstImage() {
+        if (!isIndex) {
+            return;
+        }
+
+        var images = window.__BUGSHOT_IMAGES__;
+        if (!images.length) {
+            return;
+        }
+
+        navigateTo("/view/" + images[0].encoded_name);
+    }
+
+    function navigateToLastImage() {
+        if (!isIndex) {
+            return;
+        }
+
+        var images = window.__BUGSHOT_IMAGES__;
+        if (!images.length) {
+            return;
+        }
+
+        navigateTo("/view/" + images[images.length - 1].encoded_name);
+    }
+
     function initDetail() {
         var container = document.getElementById("image-container");
         var previousSlot = document.getElementById("prev-slot");
@@ -150,25 +185,25 @@
             container.appendChild(ansiDiv);
         }
 
-        if (detail.nav.prev) {
-            var previousLink = document.createElement("a");
-            previousLink.href = detail.nav.prev;
-            previousLink.className = "btn";
-            previousLink.id = "prev-btn";
-            previousLink.textContent = "\u2190 " + detail.nav.prev_name;
-            bindInternalNavigation(previousLink);
-            previousSlot.appendChild(previousLink);
-        }
+        previousSlot.appendChild(
+            createNavigationButton({
+                id: "prev-btn",
+                label: "Previous",
+                destination: detail.nav.prev,
+                detailName: detail.nav.prev_name,
+                direction: "previous",
+            })
+        );
 
-        if (detail.nav.next) {
-            var nextLink = document.createElement("a");
-            nextLink.href = detail.nav.next;
-            nextLink.className = "btn";
-            nextLink.id = "next-btn";
-            nextLink.textContent = detail.nav.next_name + " \u2192";
-            bindInternalNavigation(nextLink);
-            nextSlot.appendChild(nextLink);
-        }
+        nextSlot.appendChild(
+            createNavigationButton({
+                id: "next-btn",
+                label: "Next",
+                destination: detail.nav.next,
+                detailName: detail.nav.next_name,
+                direction: "next",
+            })
+        );
 
         if (indexButton) {
             bindInternalNavigation(indexButton);
@@ -261,6 +296,31 @@
         link.addEventListener("click", function () {
             isInternalNavigation = true;
         });
+    }
+
+    function createNavigationButton(config) {
+        if (!config.destination) {
+            var disabledButton = document.createElement("span");
+            disabledButton.className = "btn btn-disabled";
+            disabledButton.id = config.id;
+            disabledButton.textContent = config.label;
+            disabledButton.setAttribute("aria-disabled", "true");
+            return disabledButton;
+        }
+
+        var link = document.createElement("a");
+        link.href = config.destination;
+        link.className = "btn";
+        link.id = config.id;
+
+        if (config.direction === "previous") {
+            link.textContent = "\u2190 " + config.detailName;
+        } else {
+            link.textContent = config.detailName + " \u2192";
+        }
+
+        bindInternalNavigation(link);
+        return link;
     }
 
     function navigateTo(path) {

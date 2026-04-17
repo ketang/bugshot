@@ -46,6 +46,14 @@ header h1 {
     background: #444;
 }
 
+.btn-disabled,
+.btn-disabled:hover {
+    background: #262626;
+    color: #666;
+    border-color: #3a3a3a;
+    cursor: default;
+}
+
 .btn-done {
     background: #2a5a2a;
     border-color: #3a7a3a;
@@ -59,6 +67,13 @@ header h1 {
     display: grid;
     gap: 16px;
     padding: 20px;
+}
+
+.index-shortcut-legend {
+    padding: 16px 20px 0;
+    color: #777;
+    font-size: 12px;
+    text-align: center;
 }
 
 .gallery.thumbnail-mode {
@@ -143,6 +158,13 @@ header h1 {
     padding: 20px;
     max-width: 1400px;
     margin: 0 auto;
+}
+
+.detail-shortcut-legend {
+    margin-bottom: 16px;
+    color: #777;
+    font-size: 12px;
+    text-align: center;
 }
 
 .detail-content {
@@ -252,14 +274,6 @@ header h1 {
 
 .comment-item .comment-actions button:hover {
     color: #e0e0e0;
-}
-
-.shortcut-hint {
-    position: fixed;
-    bottom: 12px;
-    right: 12px;
-    color: #555;
-    font-size: 11px;
 }
 
 @media (max-width: 720px) {

@@ -7,7 +7,6 @@ from __future__ import annotations
 import argparse
 import os
 
-from bugshot_tracker import MockIssueTracker
 from bugshot_workflow import (
     DEFAULT_BIND_ADDRESS,
     DEFAULT_POLL_INTERVAL_SECONDS,
@@ -15,22 +14,10 @@ from bugshot_workflow import (
     run_review_session,
 )
 
-SUPPORTED_TRACKERS = ("mock",)
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Bugshot standalone CLI")
     parser.add_argument("directory", help="Path to screenshot directory")
-    parser.add_argument(
-        "--tracker",
-        choices=SUPPORTED_TRACKERS,
-        default="mock",
-        help="Tracker backend to use",
-    )
-    parser.add_argument(
-        "--mock-state",
-        help="Path to the mock tracker JSON state file",
-    )
     parser.add_argument(
         "--bind",
         default=DEFAULT_BIND_ADDRESS,
@@ -50,14 +37,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_tracker(args: argparse.Namespace) -> MockIssueTracker:
-    if args.tracker != "mock":
-        raise ValueError(f"unsupported tracker: {args.tracker}")
-    if not args.mock_state:
-        raise ValueError("--mock-state is required when --tracker=mock")
-    return MockIssueTracker(args.mock_state)
-
-
 def main() -> int:
     args = parse_args()
     io = ShellIO()
@@ -67,10 +46,8 @@ def main() -> int:
         return 2
 
     try:
-        tracker = build_tracker(args)
         return run_review_session(
             screenshot_dir=os.path.abspath(args.directory),
-            tracker=tracker,
             io=io,
             bind_address=args.bind,
             open_browser=args.open_browser,
