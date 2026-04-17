@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """Command-line entrypoint for standalone bugshot review sessions."""
 
 from __future__ import annotations
