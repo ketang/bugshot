@@ -24,13 +24,25 @@ NEGATIVE_RESPONSES = {"n", "no"}
 class ShellIO:
     """Shell-facing input and output adapter."""
 
-    def __init__(self, input_stream=None, output_stream=None, error_stream=None):
+    def __init__(
+        self,
+        input_stream=None,
+        output_stream=None,
+        error_stream=None,
+        json_output: bool = False,
+    ):
         self.input_stream = input_stream or sys.stdin
         self.output_stream = output_stream or sys.stdout
         self.error_stream = error_stream or sys.stderr
+        self.json_output = json_output
 
     def write(self, message: str = "") -> None:
-        self.output_stream.write(f"{message}\n")
+        stream = self.error_stream if self.json_output else self.output_stream
+        stream.write(f"{message}\n")
+        stream.flush()
+
+    def write_json(self, payload: object) -> None:
+        self.output_stream.write(json.dumps(payload) + "\n")
         self.output_stream.flush()
 
     def write_error(self, message: str) -> None:
@@ -55,6 +67,7 @@ class ShellIO:
 @dataclass
 class ReviewSummary:
     draft_count: int
+    drafts: list[dict[str, str]]
 
 
 def run_review_session(
@@ -63,6 +76,7 @@ def run_review_session(
     bind_address: str = DEFAULT_BIND_ADDRESS,
     open_browser: bool = DEFAULT_BROWSER_OPEN_ENABLED,
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
+    json_output: bool = False,
 ) -> int:
     server_process = _start_server(screenshot_dir, bind_address)
     try:
@@ -82,8 +96,13 @@ def run_review_session(
 
         _wait_for_completion(gallery_url, io, poll_interval_seconds)
         comments = _fetch_comments(gallery_url)
-        summary = _process_comments(comments, screenshot_dir, io)
+        summary = _process_comments(comments, screenshot_dir, io, json_output=json_output)
         io.write(f"Bugshot session complete. Produced {summary.draft_count} issue drafts.")
+        if json_output:
+            io.write_json({
+                "draft_count": summary.draft_count,
+                "drafts": summary.drafts,
+            })
         return 0
     finally:
         _stop_server(server_process)
@@ -153,27 +172,34 @@ def _process_comments(
     comments: list[dict[str, object]],
     screenshot_dir: str,
     io: ShellIO,
+    json_output: bool = False,
 ) -> ReviewSummary:
     if not comments:
         io.write("No comments were submitted.")
-        return ReviewSummary(draft_count=0)
+        return ReviewSummary(draft_count=0, drafts=[])
 
-    draft_count = 0
+    drafts: list[dict[str, str]] = []
 
     for comment in comments:
         image_name = comment["image"]
         image_path = os.path.join(os.path.abspath(screenshot_dir), image_name)
         user_comment = comment["body"]
 
-        io.write("")
-        io.write(ISSUE_DIVIDER)
-        io.write(f"Image name: {image_name}")
-        io.write(f"Image path: {image_path}")
-        io.write(f"User comment: {user_comment}")
-        io.write("")
-        draft_count += 1
+        drafts.append({
+            "image_name": image_name,
+            "image_path": image_path,
+            "user_comment": user_comment,
+        })
 
-    return ReviewSummary(draft_count=draft_count)
+        if not json_output:
+            io.write("")
+            io.write(ISSUE_DIVIDER)
+            io.write(f"Image name: {image_name}")
+            io.write(f"Image path: {image_path}")
+            io.write(f"User comment: {user_comment}")
+            io.write("")
+
+    return ReviewSummary(draft_count=len(drafts), drafts=drafts)
 
 
 def _get_json(url: str) -> dict[str, object] | list[dict[str, object]]:

@@ -20,15 +20,18 @@ def _post_json(url, payload):
         return response.status, response.read()
 
 
-def _start_cli(repo_root, screenshot_dir):
+def _start_cli(repo_root, screenshot_dir, extra_args=None):
+    args = [
+        "python3",
+        "bugshot_cli.py",
+        screenshot_dir,
+        "--poll-interval",
+        "0.05",
+    ]
+    if extra_args:
+        args.extend(extra_args)
     return subprocess.Popen(
-        [
-            "python3",
-            "bugshot_cli.py",
-            screenshot_dir,
-            "--poll-interval",
-            "0.05",
-        ],
+        args,
         cwd=repo_root,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -37,12 +40,13 @@ def _start_cli(repo_root, screenshot_dir):
     )
 
 
-def _read_gallery_url(process):
+def _read_gallery_url(process, source="stdout"):
     deadline = time.time() + CLI_START_TIMEOUT_SECONDS
     output_lines = []
+    stream = process.stdout if source == "stdout" else process.stderr
 
     while time.time() < deadline:
-        line = process.stdout.readline()
+        line = stream.readline()
         if line:
             output_lines.append(line)
             if line.startswith("Gallery is running at "):
@@ -113,6 +117,45 @@ def test_cli_emits_ansi_draft(repo_root, workflow_screenshot_dir):
     assert f"Image path: {workflow_screenshot_dir}/terminal-output.ansi" in full_output
     assert "User comment: Rendered output is missing the outer border." in full_output
     assert "Bugshot session complete. Produced 1 issue drafts." in full_output
+
+
+def test_cli_json_output(repo_root, workflow_screenshot_dir):
+    process = _start_cli(repo_root, workflow_screenshot_dir, extra_args=["--json"])
+    gallery_url, _initial_stderr = _read_gallery_url(process, source="stderr")
+
+    _post_json(
+        f"{gallery_url}/api/comments",
+        {
+            "image": "login-clipped-button.png",
+            "body": "Submit button is clipped on the right edge.",
+        },
+    )
+    _post_json(
+        f"{gallery_url}/api/comments",
+        {
+            "image": "settings-overlap.png",
+            "body": "The panel header overlaps the first checkbox.",
+        },
+    )
+    _post_json(f"{gallery_url}/api/done", {})
+
+    stdout, _stderr = process.communicate("", timeout=CLI_FINISH_TIMEOUT_SECONDS)
+
+    assert process.returncode == 0
+    payload = json.loads(stdout.strip())
+    assert payload["draft_count"] == 2
+    assert payload["drafts"] == [
+        {
+            "image_name": "login-clipped-button.png",
+            "image_path": f"{workflow_screenshot_dir}/login-clipped-button.png",
+            "user_comment": "Submit button is clipped on the right edge.",
+        },
+        {
+            "image_name": "settings-overlap.png",
+            "image_path": f"{workflow_screenshot_dir}/settings-overlap.png",
+            "user_comment": "The panel header overlaps the first checkbox.",
+        },
+    ]
 
 
 def test_cli_handles_empty_review(repo_root, workflow_screenshot_dir):
