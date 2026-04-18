@@ -34,12 +34,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Open the gallery URL in the default browser",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit a single JSON object on stdout instead of markdown text",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    io = ShellIO()
+    io = ShellIO(json_output=args.json)
 
     if not os.path.isdir(args.directory):
         io.write_error(f"Not a directory: {args.directory}")
@@ -52,6 +57,7 @@ def main() -> int:
             bind_address=args.bind,
             open_browser=args.open_browser,
             poll_interval_seconds=args.poll_interval,
+            json_output=args.json,
         )
     except Exception as error:  # pragma: no cover - top-level CLI handling
         io.write_error(f"Bugshot CLI failed: {error}")
