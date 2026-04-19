@@ -1,7 +1,7 @@
 {
   "name": "bugshot",
   "description": "Ephemeral screenshot gallery for visual bug review and issue filing",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": {
     "name": "Ketan Gangatirkar"
   }
