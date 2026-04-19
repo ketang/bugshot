@@ -1,6 +1,6 @@
 """Bugshot gallery server.
 
-Usage: python3 gallery_server.py /path/to/screenshots [--bind ADDRESS]
+Usage: python3 gallery_server.py /path/to/screenshots [--bind ADDRESS | --local-only]
 """
 
 import argparse
@@ -399,7 +399,7 @@ class GalleryServer:
         self.thread.join(timeout=5)
 
 
-def create_server(screenshot_dir, bind_address="127.0.0.1"):
+def create_server(screenshot_dir, bind_address="0.0.0.0"):
     """Create and start a gallery server in a background thread.
 
     Returns a GalleryServer. Raises ValueError on invalid directory or no images.
@@ -441,14 +441,21 @@ def create_server(screenshot_dir, bind_address="127.0.0.1"):
 def main():
     parser = argparse.ArgumentParser(description="Bugshot gallery server")
     parser.add_argument("directory", help="Path to screenshot directory")
-    parser.add_argument(
-        "--bind", default="127.0.0.1",
-        help="Address to bind to (default: 127.0.0.1)",
+    bind_group = parser.add_mutually_exclusive_group()
+    bind_group.add_argument(
+        "--bind", default="0.0.0.0",
+        help="Address to bind to (default: 0.0.0.0, all interfaces)",
+    )
+    bind_group.add_argument(
+        "--local-only", action="store_true",
+        help="Shortcut for --bind 127.0.0.1 (loopback only)",
     )
     args = parser.parse_args()
 
+    bind_address = "127.0.0.1" if args.local_only else args.bind
+
     try:
-        server = create_server(args.directory, bind_address=args.bind)
+        server = create_server(args.directory, bind_address=bind_address)
     except ValueError as error:
         print(json.dumps({"error": str(error)}), flush=True)
         sys.exit(1)

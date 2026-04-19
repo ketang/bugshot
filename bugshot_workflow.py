@@ -14,7 +14,8 @@ from dataclasses import dataclass
 
 import gallery_server
 
-DEFAULT_BIND_ADDRESS = "127.0.0.1"
+DEFAULT_BIND_ADDRESS = "0.0.0.0"
+LOOPBACK_BIND_ADDRESS = "127.0.0.1"
 DEFAULT_BROWSER_OPEN_ENABLED = False
 DEFAULT_POLL_INTERVAL_SECONDS = 0.2
 ISSUE_DIVIDER = "------------------------------------------------------------"

@@ -10,6 +10,7 @@ import os
 from bugshot_workflow import (
     DEFAULT_BIND_ADDRESS,
     DEFAULT_POLL_INTERVAL_SECONDS,
+    LOOPBACK_BIND_ADDRESS,
     ShellIO,
     run_review_session,
 )
@@ -18,10 +19,16 @@ from bugshot_workflow import (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Bugshot standalone CLI")
     parser.add_argument("directory", help="Path to screenshot directory")
-    parser.add_argument(
+    bind_group = parser.add_mutually_exclusive_group()
+    bind_group.add_argument(
         "--bind",
         default=DEFAULT_BIND_ADDRESS,
-        help=f"Address to bind to (default: {DEFAULT_BIND_ADDRESS})",
+        help=f"Address to bind to (default: {DEFAULT_BIND_ADDRESS}, all interfaces)",
+    )
+    bind_group.add_argument(
+        "--local-only",
+        action="store_true",
+        help=f"Shortcut for --bind {LOOPBACK_BIND_ADDRESS} (loopback only)",
     )
     parser.add_argument(
         "--poll-interval",
@@ -50,11 +57,13 @@ def main() -> int:
         io.write_error(f"Not a directory: {args.directory}")
         return 2
 
+    bind_address = LOOPBACK_BIND_ADDRESS if args.local_only else args.bind
+
     try:
         return run_review_session(
             screenshot_dir=os.path.abspath(args.directory),
             io=io,
-            bind_address=args.bind,
+            bind_address=bind_address,
             open_browser=args.open_browser,
             poll_interval_seconds=args.poll_interval,
             json_output=args.json,
