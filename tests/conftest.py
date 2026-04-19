@@ -1,10 +1,15 @@
-import json
 import os
 import shutil
-import subprocess
+import sys
 import tempfile
 
 import pytest
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+import gallery_server  # noqa: E402
 
 
 @pytest.fixture
@@ -12,7 +17,6 @@ def screenshot_dir():
     """Create a temp directory with test images and an ANSI file."""
     d = tempfile.mkdtemp(prefix="bugshot_test_")
 
-    # Create minimal valid PNG files (1x1 pixel)
     png_bytes = (
         b"\x89PNG\r\n\x1a\n"
         b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -26,7 +30,6 @@ def screenshot_dir():
         with open(os.path.join(d, name), "wb") as f:
             f.write(png_bytes)
 
-    # Create an ANSI file
     with open(os.path.join(d, "delta.ansi"), "w") as f:
         f.write("\x1b[31mRed text\x1b[0m\n")
 
@@ -61,25 +64,16 @@ def workflow_screenshot_dir():
 
 @pytest.fixture
 def repo_root():
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return REPO_ROOT
 
 
 @pytest.fixture
 def server(screenshot_dir):
-    """Start the gallery server and yield (url, info, process)."""
-    proc = subprocess.Popen(
-        ["python3", "gallery_server.py", screenshot_dir],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    )
-
-    # Read startup JSON from stdout
-    line = proc.stdout.readline().decode().strip()
-    info = json.loads(line)
-    url = info["url"]
-
-    yield url, info, proc
-
-    proc.terminate()
-    proc.wait(timeout=5)
+    """Start an in-process gallery server and yield it."""
+    running = gallery_server.create_server(screenshot_dir)
+    try:
+        yield running
+    finally:
+        running.shutdown()
+        if os.path.exists(running.db_path):
+            os.unlink(running.db_path)

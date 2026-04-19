@@ -83,12 +83,6 @@ echo "=== Testing comment CRUD ==="
 RESP=$(curl -s -X POST "$URL/api/comments" -H "Content-Type: application/json" -d '{"image":"alpha.png","body":"Test issue"}')
 check "Comment created" "$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('id')==1 and d.get('body')=='Test issue' else 'false')")"
 
-RESP=$(curl -s "$URL/api/comments")
-check "Comment list" "$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if len(d)==1 else 'false')")"
-
-RESP=$(curl -s "$URL/api/comments?image=alpha.png")
-check "Comment filter" "$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if len(d)==1 else 'false')")"
-
 RESP=$(curl -s -X PATCH "$URL/api/comments/1" -H "Content-Type: application/json" -d '{"body":"Updated issue"}')
 check "Comment updated" "$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('body')=='Updated issue' else 'false')")"
 
@@ -101,12 +95,8 @@ echo "=== Testing session lifecycle ==="
 RESP=$(curl -s -X POST "$URL/api/heartbeat" -H "Content-Type: application/json" -d '{}')
 check "Heartbeat" "$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('ok') else 'false')")"
 
-RESP=$(curl -s "$URL/api/status")
-check "Status not done" "$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if not d.get('done') else 'false')")"
-
-curl -s -X POST "$URL/api/done" -H "Content-Type: application/json" -d '{}' > /dev/null
-RESP=$(curl -s "$URL/api/status")
-check "Done after button" "$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print('true' if d.get('done') and d.get('reason')=='button' else 'false')")"
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$URL/api/done" -H "Content-Type: application/json" -d '{}')
+check "Done button accepted" "$([ "$HTTP_CODE" = "200" ] && echo true || echo false)"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

@@ -5,12 +5,12 @@ Usage: python3 gallery_server.py /path/to/screenshots [--bind ADDRESS]
 
 import argparse
 import atexit
-import datetime
 import json
 import os
 import sqlite3
 import sys
 import tempfile
+import threading
 import urllib.parse
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -41,7 +41,7 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 class GalleryHandler(SimpleHTTPRequestHandler):
     """Routes requests to the appropriate handler."""
 
-    # Set by main() before serving
+    # Set by create_server() before serving
     screenshot_dir = None
     images = None
     db_path = None
@@ -65,10 +65,6 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             self._serve_static(path[len("/static/"):])
         elif path.startswith("/screenshots/"):
             self._serve_screenshot(path[len("/screenshots/"):])
-        elif path == "/api/comments":
-            self._serve_comments_list()
-        elif path == "/api/status":
-            self._serve_status()
         else:
             self.send_error(404)
 
@@ -248,25 +244,6 @@ class GalleryHandler(SimpleHTTPRequestHandler):
 
     # -- API handlers --
 
-    def _serve_comments_list(self):
-        parsed = urllib.parse.urlparse(self.path)
-        query = urllib.parse.parse_qs(parsed.query)
-        image_filter = query.get("image", [None])[0]
-
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        if image_filter:
-            rows = conn.execute(
-                "SELECT id, image, body, created_at FROM comments WHERE image = ? ORDER BY id",
-                (image_filter,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT id, image, body, created_at FROM comments ORDER BY id"
-            ).fetchall()
-        conn.close()
-        self._send_json([dict(r) for r in rows])
-
     def _handle_comment_create(self):
         data = self._read_json_body()
         image = data.get("image")
@@ -353,36 +330,6 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         conn.close()
         self._send_json({"ok": True})
 
-    def _serve_status(self):
-        conn = sqlite3.connect(self.db_path)
-        done_row = conn.execute(
-            "SELECT value FROM session WHERE key = 'done'"
-        ).fetchone()
-        reason_row = conn.execute(
-            "SELECT value FROM session WHERE key = 'done_reason'"
-        ).fetchone()
-        heartbeat_row = conn.execute(
-            "SELECT value FROM session WHERE key = 'last_heartbeat'"
-        ).fetchone()
-        conn.close()
-
-        done = done_row[0] == "true" if done_row else False
-        reason = reason_row[0] if reason_row and reason_row[0] else None
-
-        # Check heartbeat timeout
-        if not done and heartbeat_row and heartbeat_row[0]:
-            try:
-                last_hb = datetime.datetime.fromisoformat(heartbeat_row[0])
-                now = datetime.datetime.now()
-                elapsed = (now - last_hb).total_seconds()
-                if elapsed > HEARTBEAT_TIMEOUT_SECONDS:
-                    done = True
-                    reason = "timeout"
-            except (ValueError, TypeError):
-                pass
-
-        self._send_json({"done": done, "reason": reason})
-
     # -- Helpers --
 
     def _send_html(self, content):
@@ -435,6 +382,62 @@ def init_db(db_path):
     conn.close()
 
 
+class GalleryServer:
+    """Running gallery server. Holds httpd, serving thread, and resources."""
+
+    def __init__(self, httpd, thread, url, db_path, images, screenshot_dir):
+        self.httpd = httpd
+        self.thread = thread
+        self.url = url
+        self.db_path = db_path
+        self.images = images
+        self.screenshot_dir = screenshot_dir
+
+    def shutdown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        self.thread.join(timeout=5)
+
+
+def create_server(screenshot_dir, bind_address="127.0.0.1"):
+    """Create and start a gallery server in a background thread.
+
+    Returns a GalleryServer. Raises ValueError on invalid directory or no images.
+    """
+    directory = os.path.abspath(screenshot_dir)
+    if not os.path.isdir(directory):
+        raise ValueError(f"Not a directory: {directory}")
+
+    images = discover_images(directory)
+    if not images:
+        raise ValueError(f"No recognized images in: {directory}")
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    template_dir = os.path.join(script_dir, "templates")
+    static_dir = os.path.join(script_dir, "static")
+
+    db_fd, db_path = tempfile.mkstemp(prefix="bugshot_", suffix=".db")
+    os.close(db_fd)
+    init_db(db_path)
+
+    handler_cls = type("BoundGalleryHandler", (GalleryHandler,), {
+        "screenshot_dir": directory,
+        "images": images,
+        "db_path": db_path,
+        "template_dir": template_dir,
+        "static_dir": static_dir,
+    })
+
+    httpd = ThreadingHTTPServer((bind_address, 0), handler_cls)
+    port = httpd.server_address[1]
+    url = f"http://{bind_address}:{port}"
+
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    return GalleryServer(httpd, thread, url, db_path, images, directory)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Bugshot gallery server")
     parser.add_argument("directory", help="Path to screenshot directory")
@@ -444,54 +447,26 @@ def main():
     )
     args = parser.parse_args()
 
-    directory = os.path.abspath(args.directory)
-    if not os.path.isdir(directory):
-        print(json.dumps({"error": f"Not a directory: {directory}"}), flush=True)
+    try:
+        server = create_server(args.directory, bind_address=args.bind)
+    except ValueError as error:
+        print(json.dumps({"error": str(error)}), flush=True)
         sys.exit(1)
 
-    images = discover_images(directory)
-    if not images:
-        print(
-            json.dumps({"error": f"No recognized images in: {directory}"}),
-            flush=True,
-        )
-        sys.exit(1)
-
-    # Locate template and static directories relative to this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    template_dir = os.path.join(script_dir, "templates")
-    static_dir = os.path.join(script_dir, "static")
-
-    # Create temp database
-    db_fd, db_path = tempfile.mkstemp(prefix="bugshot_", suffix=".db")
-    os.close(db_fd)
-    atexit.register(lambda: os.unlink(db_path) if os.path.exists(db_path) else None)
-
-    init_db(db_path)
-
-    # Configure handler
-    GalleryHandler.screenshot_dir = directory
-    GalleryHandler.images = images
-    GalleryHandler.db_path = db_path
-    GalleryHandler.template_dir = template_dir
-    GalleryHandler.static_dir = static_dir
-
-    httpd = ThreadingHTTPServer((args.bind, 0), GalleryHandler)
-    port = httpd.server_address[1]
-    url = f"http://{args.bind}:{port}"
+    atexit.register(
+        lambda: os.unlink(server.db_path) if os.path.exists(server.db_path) else None
+    )
 
     print(json.dumps({
-        "port": port,
-        "url": url,
-        "images": images,
+        "port": server.httpd.server_address[1],
+        "url": server.url,
+        "images": server.images,
     }), flush=True)
 
     try:
-        httpd.serve_forever()
+        server.thread.join()
     except KeyboardInterrupt:
-        pass
-    finally:
-        httpd.server_close()
+        server.shutdown()
 
 
 if __name__ == "__main__":

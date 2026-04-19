@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import select
-import subprocess
+import sqlite3
 import sys
 import time
-import urllib.error
-import urllib.request
 import webbrowser
 from dataclasses import dataclass
+
+import gallery_server
 
 DEFAULT_BIND_ADDRESS = "127.0.0.1"
 DEFAULT_BROWSER_OPEN_ENABLED = False
 DEFAULT_POLL_INTERVAL_SECONDS = 0.2
-HTTP_SUCCESS_STATUS = 200
 ISSUE_DIVIDER = "------------------------------------------------------------"
 NEGATIVE_RESPONSES = {"n", "no"}
 
@@ -78,25 +78,32 @@ def run_review_session(
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     json_output: bool = False,
 ) -> int:
-    server_process = _start_server(screenshot_dir, bind_address)
     try:
-        startup_info = _read_startup(server_process)
-        gallery_url = startup_info["url"]
+        server = gallery_server.create_server(screenshot_dir, bind_address=bind_address)
+    except ValueError as error:
+        io.write_error(str(error))
+        return 1
 
-        io.write(f"Gallery is running at {gallery_url}")
+    try:
+        io.write(f"Gallery is running at {server.url}")
         if open_browser:
-            browser_opened = webbrowser.open(gallery_url)
+            browser_opened = webbrowser.open(server.url)
             if not browser_opened:
-                io.write(f"Open this URL in your browser: {gallery_url}")
+                io.write(f"Open this URL in your browser: {server.url}")
 
         io.write(
             "Bugshot gallery is open. Review the screenshots, type comments on any issues "
             "you see, then click \"Done Reviewing\" when finished."
         )
 
-        _wait_for_completion(gallery_url, io, poll_interval_seconds)
-        comments = _fetch_comments(gallery_url)
-        summary = _process_comments(comments, screenshot_dir, io, json_output=json_output)
+        _wait_for_completion(server.db_path, io, poll_interval_seconds)
+        comments = _fetch_comments(server.db_path)
+        summary = _process_comments(
+            comments,
+            os.path.abspath(screenshot_dir),
+            io,
+            json_output=json_output,
+        )
         io.write(f"Bugshot session complete. Produced {summary.draft_count} issue drafts.")
         if json_output:
             io.write_json({
@@ -105,53 +112,49 @@ def run_review_session(
             })
         return 0
     finally:
-        _stop_server(server_process)
+        server.shutdown()
+        if os.path.exists(server.db_path):
+            os.unlink(server.db_path)
 
 
-def _start_server(screenshot_dir: str, bind_address: str) -> subprocess.Popen:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    command = [
-        "python3",
-        os.path.join(script_dir, "gallery_server.py"),
-        screenshot_dir,
-        "--bind",
-        bind_address,
-    ]
-    return subprocess.Popen(
-        command,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=script_dir,
-    )
-
-
-def _read_startup(server_process: subprocess.Popen) -> dict[str, object]:
-    startup_line = server_process.stdout.readline().strip()
-    if startup_line:
-        payload = json.loads(startup_line)
-        if "error" in payload:
-            raise RuntimeError(payload["error"])
-        return payload
-
-    stderr_output = server_process.stderr.read().strip()
-    if server_process.poll() is not None:
-        raise RuntimeError(stderr_output or "gallery server exited before startup")
-    raise RuntimeError("gallery server did not emit startup JSON")
-
-
-def _wait_for_completion(gallery_url: str, io: ShellIO, poll_interval_seconds: float) -> str | None:
-    status_url = f"{gallery_url}/api/status"
+def _wait_for_completion(db_path: str, io: ShellIO, poll_interval_seconds: float) -> str | None:
     while True:
-        status = _get_json(status_url)
-        if status["done"]:
-            return status["reason"]
+        done, reason = _read_session_state(db_path)
+        if done:
+            return reason
         time.sleep(poll_interval_seconds)
         if _terminal_input_is_ready(io):
             user_line = io.prompt("")
             if user_line.strip().lower() == "done":
                 return "terminal"
+
+
+def _read_session_state(db_path: str) -> tuple[bool, str | None]:
+    """Read session state directly from SQLite, applying heartbeat timeout."""
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = {
+            key: value
+            for key, value in conn.execute("SELECT key, value FROM session").fetchall()
+        }
+    finally:
+        conn.close()
+
+    done = rows.get("done") == "true"
+    reason = rows.get("done_reason") or None
+
+    if not done:
+        last_heartbeat = rows.get("last_heartbeat")
+        if last_heartbeat:
+            try:
+                last_hb = datetime.datetime.fromisoformat(last_heartbeat)
+                elapsed = (datetime.datetime.now() - last_hb).total_seconds()
+                if elapsed > gallery_server.HEARTBEAT_TIMEOUT_SECONDS:
+                    return True, "timeout"
+            except (ValueError, TypeError):
+                pass
+
+    return done, reason
 
 
 def _terminal_input_is_ready(io: ShellIO) -> bool:
@@ -164,8 +167,16 @@ def _terminal_input_is_ready(io: ShellIO) -> bool:
     return bool(ready_streams)
 
 
-def _fetch_comments(gallery_url: str) -> list[dict[str, object]]:
-    return _get_json(f"{gallery_url}/api/comments")
+def _fetch_comments(db_path: str) -> list[dict[str, object]]:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT id, image, body, created_at FROM comments ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+    return [dict(row) for row in rows]
 
 
 def _process_comments(
@@ -182,7 +193,7 @@ def _process_comments(
 
     for comment in comments:
         image_name = comment["image"]
-        image_path = os.path.join(os.path.abspath(screenshot_dir), image_name)
+        image_path = os.path.join(screenshot_dir, image_name)
         user_comment = comment["body"]
 
         drafts.append({
@@ -200,25 +211,3 @@ def _process_comments(
             io.write("")
 
     return ReviewSummary(draft_count=len(drafts), drafts=drafts)
-
-
-def _get_json(url: str) -> dict[str, object] | list[dict[str, object]]:
-    request = urllib.request.Request(url, method="GET")
-    try:
-        with urllib.request.urlopen(request) as response:
-            if response.status != HTTP_SUCCESS_STATUS:
-                raise RuntimeError(f"unexpected status code: {response.status}")
-            return json.loads(response.read())
-    except urllib.error.URLError as error:
-        raise RuntimeError(f"failed to reach {url}: {error}") from error
-
-
-def _stop_server(server_process: subprocess.Popen) -> None:
-    if server_process.poll() is not None:
-        return
-    server_process.terminate()
-    try:
-        server_process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        server_process.kill()
-        server_process.wait(timeout=5)
