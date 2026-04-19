@@ -50,9 +50,11 @@ def bump_version(version: str) -> str:
     return ".".join(parts)
 
 
-def write_json(path: Path, data: object) -> None:
+def write_json(path: Path, data: object, verbose: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n")
+    if verbose:
+        print(f"  wrote {path.relative_to(ROOT)}")
 
 
 def claude_manifest(version: str) -> dict:
@@ -202,25 +204,50 @@ def make_screenshot(path: Path, variant: int) -> None:
     write_png(path, w, h, px)
 
 
-def write_assets() -> None:
+def write_assets(verbose: bool = False) -> None:
     assets = ROOT / "assets"
     assets.mkdir(exist_ok=True)
-    make_icon(assets / "icon.png")
-    make_logo(assets / "logo.png")
+    for name, fn in [
+        ("icon.png", make_icon),
+        ("logo.png", make_logo),
+    ]:
+        fn(assets / name)
+        if verbose:
+            print(f"  wrote assets/{name}")
     for v in range(1, 4):
-        make_screenshot(assets / f"screenshot-{v}.png", v)
+        name = f"screenshot-{v}.png"
+        make_screenshot(assets / name, v)
+        if verbose:
+            print(f"  wrote assets/{name}")
+
+
+USAGE = """\
+usage: build-plugin [--bump] [-h | --help] [-v | --verbose]
+
+Build the Claude and Codex plugin manifests and regenerate assets.
+
+options:
+  --bump          increment the patch version before building
+  -v, --verbose   print each output path as it is written
+  -h, --help      show this message and exit
+"""
 
 
 def main() -> None:
-    bump = "--bump" in sys.argv
+    args = sys.argv[1:]
+    if "-h" in args or "--help" in args:
+        print(USAGE, end="")
+        sys.exit(0)
+    verbose = "-v" in args or "--verbose" in args
+    bump = "--bump" in args
     version = read_version()
     if bump:
         version = bump_version(version)
         write_json(VERSION_FILE, {"version": version})
         print(f"Bumped to {version}")
-    write_json(ROOT / ".claude-plugin" / "plugin.json", claude_manifest(version))
-    write_json(ROOT / ".codex-plugin" / "plugin.json", codex_manifest(version))
-    write_assets()
+    write_json(ROOT / ".claude-plugin" / "plugin.json", claude_manifest(version), verbose)
+    write_json(ROOT / ".codex-plugin" / "plugin.json", codex_manifest(version), verbose)
+    write_assets(verbose)
     print(f"Built plugin v{version}")
 
 
