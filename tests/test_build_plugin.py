@@ -38,8 +38,20 @@ def test_bump_version():
     assert mod.bump_version("2.3.9") == "2.3.10"
 
 
+def setup_source_files(tmp_path: Path) -> None:
+    """Create minimal source files that build-plugin copies into skills/bugshot/."""
+    (tmp_path / "SKILL.md").write_text("---\nname: bugshot\n---\n")
+    for name in ["bugshot_cli.py", "bugshot_workflow.py", "gallery_server.py", "ansi_render.py"]:
+        (tmp_path / name).write_text(f"# {name}\n")
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "style.css").write_text("")
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "templates" / "index.html").write_text("")
+
+
 def test_build_generates_manifests(tmp_path, monkeypatch):
     mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
     monkeypatch.setattr(sys, "argv", ["build-plugin"])
     mod.main()
 
@@ -56,8 +68,23 @@ def test_build_generates_manifests(tmp_path, monkeypatch):
     assert codex["interface"]["brandColor"] == "#2090C8"
 
 
+def test_build_generates_skill_dir(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["build-plugin"])
+    mod.main()
+
+    skill_dir = tmp_path / "skills" / "bugshot"
+    assert (skill_dir / "SKILL.md").exists()
+    for name in mod.SKILL_FILES:
+        assert (skill_dir / name).exists(), f"missing {name} in skills/bugshot/"
+    assert (skill_dir / "static").is_dir()
+    assert (skill_dir / "templates").is_dir()
+
+
 def test_build_generates_assets(tmp_path, monkeypatch):
     mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
     monkeypatch.setattr(sys, "argv", ["build-plugin"])
     mod.main()
 
@@ -70,6 +97,7 @@ def test_build_generates_assets(tmp_path, monkeypatch):
 
 def test_bump_flag_increments_version(tmp_path, monkeypatch):
     mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
     monkeypatch.setattr(sys, "argv", ["build-plugin", "--bump"])
     mod.main()
 
@@ -81,6 +109,7 @@ def test_bump_flag_increments_version(tmp_path, monkeypatch):
 
 def test_no_bump_flag_is_idempotent(tmp_path, monkeypatch):
     mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
     monkeypatch.setattr(sys, "argv", ["build-plugin"])
     mod.main()
     mod.main()

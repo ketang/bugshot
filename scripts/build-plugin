@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import json
+import shutil
 import struct
 import sys
 import zlib
@@ -221,16 +222,44 @@ def write_assets(verbose: bool = False) -> None:
             print(f"  wrote assets/{name}")
 
 
+SKILL_FILES = [
+    "bugshot_cli.py",
+    "bugshot_workflow.py",
+    "gallery_server.py",
+    "ansi_render.py",
+]
+
 USAGE = """\
 usage: build-plugin [--bump] [-h | --help] [-v | --verbose]
 
-Build the Claude and Codex plugin manifests and regenerate assets.
+Build the Claude and Codex plugin manifests, skill directory, and assets.
 
 options:
   --bump          increment the patch version before building
   -v, --verbose   print each output path as it is written
   -h, --help      show this message and exit
 """
+
+
+def write_skill_dir(verbose: bool = False) -> None:
+    skill_dir = ROOT / "skills" / "bugshot"
+    if skill_dir.exists():
+        shutil.rmtree(skill_dir)
+    skill_dir.mkdir(parents=True)
+
+    shutil.copy(ROOT / "SKILL.md", skill_dir / "SKILL.md")
+    if verbose:
+        print("  wrote skills/bugshot/SKILL.md")
+
+    for filename in SKILL_FILES:
+        shutil.copy(ROOT / filename, skill_dir / filename)
+        if verbose:
+            print(f"  wrote skills/bugshot/{filename}")
+
+    for subdir in ("static", "templates"):
+        shutil.copytree(ROOT / subdir, skill_dir / subdir)
+        if verbose:
+            print(f"  wrote skills/bugshot/{subdir}/")
 
 
 def main() -> None:
@@ -247,6 +276,7 @@ def main() -> None:
         print(f"Bumped to {version}")
     write_json(ROOT / ".claude-plugin" / "plugin.json", claude_manifest(version), verbose)
     write_json(ROOT / ".codex-plugin" / "plugin.json", codex_manifest(version), verbose)
+    write_skill_dir(verbose)
     write_assets(verbose)
     print(f"Built plugin v{version}")
 
