@@ -21,7 +21,7 @@ Review screenshots in a browser gallery and file issues from user comments.
 python3 {{bugshot_dir}}/bugshot_cli.py --json {{directory}}
 ```
 
-4. Read the first line of the CLI's stderr — it is `Gallery is running at <url>`. Tell the user:
+4. Read the first line of the CLI's stderr — it is `Gallery is running at <url>`. In an interactive agent session, immediately print this URL in the visible conversation even if the CLI is running as a background command. Tell the user:
 
    > Bugshot gallery is running at `<url>`. Open that URL, review the screenshots, type comments on any issues you see, then click "Done Reviewing".
 
