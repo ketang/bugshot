@@ -5,10 +5,13 @@
     var INDEX_PATH = "/";
     var SHORTCUT_KEY_SIZE = "s";
     var SHORTCUT_KEY_NEXT = "n";
+    var SHORTCUT_KEY_NEXT_ALTERNATE = ".";
     var SHORTCUT_KEY_PREVIOUS = "p";
+    var SHORTCUT_KEY_PREVIOUS_ALTERNATE = ",";
     var SHORTCUT_KEY_INDEX = "i";
     var SHORTCUT_KEY_QUIT = "q";
     var SHORTCUT_KEY_FOCUS_COMMENT = "/";
+    var SHORTCUT_KEY_COPY_FILENAME = "c";
     var SHORTCUT_KEY_ENTER = "Enter";
     var SHORTCUT_KEY_GO_TO = "g";
     var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
@@ -20,6 +23,7 @@
     var jumpModal = null;
     var jumpModalInput = null;
     var jumpModalError = null;
+    var copyFilenameStatusTimeout = null;
 
     setInterval(function () {
         fetch("/api/heartbeat", { method: "POST" }).catch(function () {});
@@ -53,6 +57,7 @@
         var activeElement = document.activeElement;
         var isTyping = activeElement &&
             (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
+        var hasModifier = event.ctrlKey || event.metaKey || event.altKey;
 
         if (isTyping) {
             if (event.key === "Escape") {
@@ -74,11 +79,32 @@
         } else if (event.key === SHORTCUT_KEY_PREVIOUS && isIndex) {
             navigateToLastImage();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_NEXT && isDetail && detail.nav.next) {
+        } else if (
+            isDetail &&
+            detail.nav.next &&
+            (
+                event.key === SHORTCUT_KEY_NEXT ||
+                (!hasModifier && event.key === SHORTCUT_KEY_NEXT_ALTERNATE)
+            )
+        ) {
             navigateTo(detail.nav.next);
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_PREVIOUS && isDetail && detail.nav.prev) {
+        } else if (
+            isDetail &&
+            detail.nav.prev &&
+            (
+                event.key === SHORTCUT_KEY_PREVIOUS ||
+                (!hasModifier && event.key === SHORTCUT_KEY_PREVIOUS_ALTERNATE)
+            )
+        ) {
             navigateTo(detail.nav.prev);
+            event.preventDefault();
+        } else if (
+            event.key === SHORTCUT_KEY_COPY_FILENAME &&
+            isDetail &&
+            !hasModifier
+        ) {
+            copyFilenameToClipboard();
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_GO_TO) {
             openJumpModal();
@@ -209,6 +235,7 @@
         var previousSlot = document.getElementById("prev-slot");
         var nextSlot = document.getElementById("next-slot");
         var indexButton = document.getElementById("index-btn");
+        var copyFilenameButton = document.getElementById("copy-filename-btn");
 
         if (detail.contentType === "image") {
             var imageElement = document.createElement("img");
@@ -246,6 +273,10 @@
 
         if (indexButton) {
             bindInternalNavigation(indexButton);
+        }
+
+        if (copyFilenameButton) {
+            copyFilenameButton.addEventListener("click", copyFilenameToClipboard);
         }
 
         var commentForm = document.getElementById("comment-form");
@@ -456,6 +487,75 @@
 
         submitJumpModal();
         event.preventDefault();
+    }
+
+    function copyFilenameToClipboard() {
+        if (!isDetail || !detail) {
+            return;
+        }
+
+        writeClipboardText(detail.filename)
+            .then(function () {
+                showCopyFilenameStatus("Copied", false);
+            })
+            .catch(function () {
+                showCopyFilenameStatus("Copy failed", true);
+            });
+    }
+
+    function writeClipboardText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text).catch(function () {
+                return fallbackCopyText(text);
+            });
+        }
+
+        return fallbackCopyText(text);
+    }
+
+    function fallbackCopyText(text) {
+        return new Promise(function (resolve, reject) {
+            var textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.setAttribute("readonly", "");
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                if (document.execCommand("copy")) {
+                    resolve();
+                } else {
+                    reject(new Error("Copy command failed"));
+                }
+            } catch (error) {
+                reject(error);
+            } finally {
+                document.body.removeChild(textArea);
+            }
+        });
+    }
+
+    function showCopyFilenameStatus(message, isError) {
+        var status = document.getElementById("copy-filename-status");
+        if (!status) {
+            return;
+        }
+
+        status.textContent = message;
+        status.classList.toggle("is-error", isError);
+
+        if (copyFilenameStatusTimeout) {
+            clearTimeout(copyFilenameStatusTimeout);
+        }
+
+        copyFilenameStatusTimeout = setTimeout(function () {
+            status.textContent = "";
+            status.classList.remove("is-error");
+        }, 2000);
     }
 
     function toggleIndexSize() {

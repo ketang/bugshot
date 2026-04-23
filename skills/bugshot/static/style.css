@@ -196,12 +196,50 @@ header h1 {
     line-height: 1.4;
 }
 
-.detail-filename {
+.detail-filename-row {
     margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.detail-filename {
     color: #999;
     font-size: 14px;
     text-align: center;
+    line-height: 1;
+    min-width: 0;
     word-break: break-word;
+}
+
+.btn-copy-filename {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    line-height: 1;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.copy-filename-icon {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex-shrink: 0;
+}
+
+.copy-filename-status {
+    width: 72px;
+    min-height: 16px;
+    color: #8ccf8c;
+    font-size: 12px;
+}
+
+.copy-filename-status.is-error {
+    color: #d27d7d;
 }
 
 .comment-section {
