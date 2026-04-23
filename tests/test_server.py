@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 import urllib.error
 import urllib.parse
@@ -84,6 +85,35 @@ def test_index_page_returns_200(server):
     body = resp.read().decode()
     assert "alpha.png" in body
     assert "beta.png" in body
+
+
+def test_detail_page_exposes_copy_filename_control(server):
+    resp = urllib.request.urlopen(f"{server.url}/view/alpha.png")
+    assert resp.status == 200
+    body = resp.read().decode()
+    assert 'id="copy-filename-btn"' in body
+    assert 'class="copy-filename-icon"' in body
+    assert "<span>Copy</span>" in body
+    assert "alpha.png" in body
+    assert "c copy filename" in body
+    assert "n/. next" in body
+    assert "p/, previous" in body
+
+
+def test_gallery_js_wires_copy_filename_shortcut(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    assert 'SHORTCUT_KEY_COPY_FILENAME = "c"' in script
+    assert 'SHORTCUT_KEY_NEXT_ALTERNATE = "."' in script
+    assert 'SHORTCUT_KEY_PREVIOUS_ALTERNATE = ","' in script
+    assert "copy-filename-btn" in script
+    assert "copyFilenameToClipboard" in script
+    assert "navigator.clipboard.writeText" in script
+
+
+def test_detail_styles_align_filename_and_copy_button(repo_root):
+    style = open(f"{repo_root}/static/style.css").read()
+    assert re.search(r"\.detail-filename\s*\{[^}]*line-height:\s*1;", style, re.S)
+    assert re.search(r"\.btn-copy-filename\s*\{[^}]*line-height:\s*1;", style, re.S)
 
 
 def test_create_comment(server):

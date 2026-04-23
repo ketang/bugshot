@@ -21,12 +21,21 @@
         </nav>
     </header>
     <main class="detail-main">
-        <div class="detail-shortcut-legend">1-9 jump · 0 last · g go to # · s size · n next · p previous · i index · q quit · / comment · Esc unfocus</div>
+        <div class="detail-shortcut-legend">1-9 jump · 0 last · g go to # · c copy filename · n/. next · p/, previous · i index · q quit · / comment · Esc unfocus</div>
         <div class="detail-content">
             <div id="image-container">
                 <!-- Image or ANSI content injected by gallery.js -->
             </div>
-            <div class="detail-filename">{{filename}}</div>
+            <div class="detail-filename-row">
+                <span class="detail-filename" id="detail-filename">{{filename}}</span>
+                <button id="copy-filename-btn" class="btn btn-copy-filename" type="button" title="Copy filename (c)">
+                    <svg class="copy-filename-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M16 4h-2.18A3 3 0 0 0 11 2H9a3 3 0 0 0-2.82 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm-7-1h2a1 1 0 0 1 .95.68l.29.82H7.76l.29-.82A1 1 0 0 1 9 3Zm7 15H4V6h12v12Zm4-10v12a2 2 0 0 1-2 2H7v-2h11V8h2Z"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
+                <span id="copy-filename-status" class="copy-filename-status" aria-live="polite"></span>
+            </div>
         </div>
         <div class="comment-section">
             <form id="comment-form">
