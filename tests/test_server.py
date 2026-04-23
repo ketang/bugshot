@@ -20,6 +20,14 @@ def _post_json(url, data):
         return e.code, json.loads(e.read())
 
 
+def _get_json(url):
+    try:
+        resp = urllib.request.urlopen(url)
+        return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
 def _patch_json(url, data):
     body = json.dumps(data).encode()
     req = urllib.request.Request(
@@ -98,6 +106,30 @@ def test_create_comment_persists(server):
     assert len(comments) == 2
     assert comments[0]["body"] == "Issue 1"
     assert comments[1]["body"] == "Issue 2"
+
+
+def test_list_comments(server):
+    _post_json(f"{server.url}/api/comments", {"image": "alpha.png", "body": "Issue 1"})
+    _post_json(f"{server.url}/api/comments", {"image": "beta.png", "body": "Issue 2"})
+
+    status, body = _get_json(f"{server.url}/api/comments")
+
+    assert status == 200
+    assert [comment["body"] for comment in body] == ["Issue 1", "Issue 2"]
+
+
+def test_list_comments_filters_by_image(server):
+    _post_json(f"{server.url}/api/comments", {"image": "alpha.png", "body": "Issue 1"})
+    _post_json(f"{server.url}/api/comments", {"image": "beta.png", "body": "Issue 2"})
+
+    status, body = _get_json(
+        f"{server.url}/api/comments?image={urllib.parse.quote('alpha.png')}"
+    )
+
+    assert status == 200
+    assert len(body) == 1
+    assert body[0]["image"] == "alpha.png"
+    assert body[0]["body"] == "Issue 1"
 
 
 def test_update_comment(server):

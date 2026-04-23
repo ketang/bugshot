@@ -46,6 +46,13 @@ header h1 {
     background: #444;
 }
 
+.btn:disabled {
+    background: #262626;
+    color: #666;
+    border-color: #3a3a3a;
+    cursor: not-allowed;
+}
+
 .btn-disabled,
 .btn-disabled:hover {
     background: #262626;
@@ -61,6 +68,26 @@ header h1 {
 
 .btn-done:hover {
     background: #3a7a3a;
+}
+
+.btn:disabled:hover {
+    background: #262626;
+}
+
+.server-status-banner {
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    padding: 10px 20px;
+    background: #5a2f18;
+    border-bottom: 1px solid #9a5b2d;
+    color: #ffe2c2;
+    font-size: 13px;
+    text-align: center;
+}
+
+.server-status-banner.is-hidden {
+    display: none;
 }
 
 .gallery {
@@ -227,6 +254,13 @@ header h1 {
 #comment-input:focus {
     outline: none;
     border-color: #888;
+}
+
+.comment-status {
+    min-height: 18px;
+    margin: -8px 0 14px;
+    color: #d27d7d;
+    font-size: 12px;
 }
 
 .detail-actions {
