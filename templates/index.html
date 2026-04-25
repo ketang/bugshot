@@ -10,6 +10,7 @@
     <header>
         <h1>Bugshot</h1>
         <div class="controls">
+            <div id="index-theme-controls" class="theme-controls"></div>
             <button id="size-toggle" class="btn">Full Size</button>
             <button id="done-btn" class="btn btn-done">Done Reviewing</button>
         </div>
@@ -19,7 +20,7 @@
         <!-- Populated by gallery.js -->
     </div>
     <script>
-        window.__BUGSHOT_IMAGES__ = {{images_json}};
+        window.__BUGSHOT_UNITS__ = {{units_json}};
     </script>
     <script src="/static/gallery.js"></script>
 </body>

@@ -65,14 +65,14 @@ def test_cli_emits_issue_drafts(repo_root, workflow_screenshot_dir):
     _post_json(
         f"{gallery_url}/api/comments",
         {
-            "image": "login-clipped-button.png",
+            "unit_id": "login-clipped-button.png",
             "body": "Submit button is clipped on the right edge.",
         },
     )
     _post_json(
         f"{gallery_url}/api/comments",
         {
-            "image": "settings-overlap.png",
+            "unit_id": "settings-overlap.png",
             "body": "The panel header overlaps the first checkbox.",
         },
     )
@@ -103,7 +103,7 @@ def test_cli_emits_ansi_draft(repo_root, workflow_screenshot_dir):
     _post_json(
         f"{gallery_url}/api/comments",
         {
-            "image": "terminal-output.ansi",
+            "unit_id": "terminal-output.ansi",
             "body": "Rendered output is missing the outer border.",
         },
     )
@@ -126,14 +126,14 @@ def test_cli_json_output(repo_root, workflow_screenshot_dir):
     _post_json(
         f"{gallery_url}/api/comments",
         {
-            "image": "login-clipped-button.png",
+            "unit_id": "login-clipped-button.png",
             "body": "Submit button is clipped on the right edge.",
         },
     )
     _post_json(
         f"{gallery_url}/api/comments",
         {
-            "image": "settings-overlap.png",
+            "unit_id": "settings-overlap.png",
             "body": "The panel header overlaps the first checkbox.",
         },
     )
@@ -155,6 +155,44 @@ def test_cli_json_output(repo_root, workflow_screenshot_dir):
             "image_path": f"{workflow_screenshot_dir}/settings-overlap.png",
             "user_comment": "The panel header overlaps the first checkbox.",
         },
+    ]
+
+
+def test_cli_emits_grouped_unit_drafts(repo_root, review_units_dir):
+    process = _start_cli(repo_root, review_units_dir, extra_args=["--json"])
+    gallery_url, _initial_stderr = _read_gallery_url(process, source="stderr")
+
+    _post_json(
+        f"{gallery_url}/api/comments",
+        {
+            "unit_id": "login-button",
+            "body": "The candidate image loses the right edge of the button.",
+        },
+    )
+    _post_json(f"{gallery_url}/api/done", {})
+
+    stdout, _stderr = process.communicate("", timeout=CLI_FINISH_TIMEOUT_SECONDS)
+
+    assert process.returncode == 0
+    payload = json.loads(stdout.strip())
+    assert payload["draft_count"] == 1
+    assert payload["drafts"] == [
+        {
+            "unit_id": "login-button",
+            "unit_label": "Login Button Review",
+            "unit_path": f"{review_units_dir}/login-button",
+            "asset_names": ["candidate.png", "final.svg", "reference.png"],
+            "asset_paths": [
+                f"{review_units_dir}/login-button/candidate.png",
+                f"{review_units_dir}/login-button/final.svg",
+                f"{review_units_dir}/login-button/reference.png",
+            ],
+            "metadata_names": ["report.json"],
+            "metadata_paths": [f"{review_units_dir}/login-button/report.json"],
+            "reference_asset_name": "reference.png",
+            "reference_asset_path": f"{review_units_dir}/login-button/reference.png",
+            "user_comment": "The candidate image loses the right edge of the button.",
+        }
     ]
 
 

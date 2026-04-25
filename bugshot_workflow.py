@@ -68,7 +68,7 @@ class ShellIO:
 @dataclass
 class ReviewSummary:
     draft_count: int
-    drafts: list[dict[str, str]]
+    drafts: list[dict[str, object]]
 
 
 def run_review_session(
@@ -101,6 +101,7 @@ def run_review_session(
         comments = _fetch_comments(server.db_path)
         summary = _process_comments(
             comments,
+            server.units,
             os.path.abspath(screenshot_dir),
             io,
             json_output=json_output,
@@ -173,7 +174,7 @@ def _fetch_comments(db_path: str) -> list[dict[str, object]]:
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            "SELECT id, image, body, created_at FROM comments ORDER BY id"
+            "SELECT id, unit_id, body, created_at FROM comments ORDER BY id"
         ).fetchall()
     finally:
         conn.close()
@@ -182,6 +183,7 @@ def _fetch_comments(db_path: str) -> list[dict[str, object]]:
 
 def _process_comments(
     comments: list[dict[str, object]],
+    units: list[dict[str, object]],
     screenshot_dir: str,
     io: ShellIO,
     json_output: bool = False,
@@ -190,24 +192,85 @@ def _process_comments(
         io.write("No comments were submitted.")
         return ReviewSummary(draft_count=0, drafts=[])
 
-    drafts: list[dict[str, str]] = []
+    units_by_id = {unit["id"]: unit for unit in units}
+    drafts: list[dict[str, object]] = []
 
     for comment in comments:
-        image_name = comment["image"]
-        image_path = os.path.join(screenshot_dir, image_name)
-        user_comment = comment["body"]
+        unit_id = comment["unit_id"]
+        unit = units_by_id.get(unit_id)
+        if unit is None:
+            continue
 
-        drafts.append({
-            "image_name": image_name,
-            "image_path": image_path,
-            "user_comment": user_comment,
-        })
+        user_comment = comment["body"]
+        unit_path = (
+            os.path.join(screenshot_dir, unit["relative_dir"])
+            if unit["relative_dir"]
+            else screenshot_dir
+        )
+        assets = [
+            {
+                "name": asset["name"],
+                "path": os.path.join(screenshot_dir, asset["relative_path"]),
+                "type": asset["type"],
+            }
+            for asset in unit["assets"]
+        ]
+        metadata = [
+            {
+                "name": item["name"],
+                "path": os.path.join(screenshot_dir, item["relative_path"]),
+            }
+            for item in unit["metadata"]
+        ]
+        reference_asset_relative_path = unit.get("reference_asset_relative_path")
+        reference_asset = None
+        if reference_asset_relative_path:
+            reference_asset = next(
+                (
+                    asset
+                    for asset in assets
+                    if asset["path"] == os.path.join(screenshot_dir, reference_asset_relative_path)
+                ),
+                None,
+            )
+
+        if len(assets) == 1:
+            draft = {
+                "image_name": assets[0]["name"],
+                "image_path": assets[0]["path"],
+                "user_comment": user_comment,
+            }
+        else:
+            draft = {
+                "unit_id": unit["id"],
+                "unit_label": unit["label"],
+                "unit_path": unit_path,
+                "asset_names": [asset["name"] for asset in assets],
+                "asset_paths": [asset["path"] for asset in assets],
+                "metadata_names": [item["name"] for item in metadata],
+                "metadata_paths": [item["path"] for item in metadata],
+                "user_comment": user_comment,
+            }
+            if reference_asset is not None:
+                draft["reference_asset_name"] = reference_asset["name"]
+                draft["reference_asset_path"] = reference_asset["path"]
+
+        drafts.append(draft)
 
         if not json_output:
             io.write("")
             io.write(ISSUE_DIVIDER)
-            io.write(f"Image name: {image_name}")
-            io.write(f"Image path: {image_path}")
+            if len(assets) == 1:
+                io.write(f"Image name: {assets[0]['name']}")
+                io.write(f"Image path: {assets[0]['path']}")
+            else:
+                io.write(f"Unit id: {unit['id']}")
+                io.write(f"Unit path: {unit_path}")
+                io.write(f"Assets: {', '.join(draft['asset_names'])}")
+                if reference_asset is not None:
+                    io.write(f"Reference asset: {reference_asset['name']}")
+                if draft["metadata_names"]:
+                    io.write(f"Metadata: {', '.join(draft['metadata_names'])}")
             io.write(f"User comment: {user_comment}")
             io.write("")
 
