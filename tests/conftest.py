@@ -63,6 +63,65 @@ def workflow_screenshot_dir():
 
 
 @pytest.fixture
+def review_units_dir():
+    """Create a temp review root with grouped image units and metadata."""
+    d = tempfile.mkdtemp(prefix="bugshot_units_")
+
+    png_bytes = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx"
+        b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    login_dir = os.path.join(d, "login-button")
+    settings_dir = os.path.join(d, "settings-panel")
+    os.makedirs(login_dir, exist_ok=True)
+    os.makedirs(settings_dir, exist_ok=True)
+
+    for unit_dir, names in [
+        (login_dir, ["reference.png", "candidate.png"]),
+        (settings_dir, ["reference.png", "candidate.png"]),
+    ]:
+        for name in names:
+            with open(os.path.join(unit_dir, name), "wb") as f:
+                f.write(png_bytes)
+
+    svg_content = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+        '<rect width="10" height="10" fill="#111"/>'
+        '<circle cx="5" cy="5" r="3" fill="#fff"/>'
+        "</svg>"
+    )
+    for unit_dir in [login_dir, settings_dir]:
+        with open(os.path.join(unit_dir, "final.svg"), "w", encoding="utf-8") as f:
+            f.write(svg_content)
+
+    with open(os.path.join(login_dir, "report.json"), "w", encoding="utf-8") as f:
+        f.write(
+            '{"kind":"comparison","reference":"reference.png","derived":["candidate.png"]}'
+        )
+    with open(os.path.join(login_dir, "bugshot-unit.json"), "w", encoding="utf-8") as f:
+        f.write(
+            '{"label":"Login Button Review","assets":["candidate.png","final.svg","reference.png"],"reference_asset":"reference.png","metadata":["report.json"]}'
+        )
+
+    with open(os.path.join(settings_dir, "report.json"), "w", encoding="utf-8") as f:
+        f.write(
+            '{"kind":"comparison","reference":"reference.png","derived":["candidate.png"],"notes":["header overlap"]}'
+        )
+    with open(os.path.join(settings_dir, "bugshot-unit.json"), "w", encoding="utf-8") as f:
+        f.write(
+            '{"label":"Settings Panel Review","assets":["reference.png","final.svg","candidate.png"],"reference_asset":"reference.png","metadata":["report.json"]}'
+        )
+
+    yield d
+    shutil.rmtree(d)
+
+
+@pytest.fixture
 def repo_root():
     return REPO_ROOT
 
@@ -77,3 +136,120 @@ def server(screenshot_dir):
         running.shutdown()
         if os.path.exists(running.db_path):
             os.unlink(running.db_path)
+
+
+@pytest.fixture
+def grouped_server(review_units_dir):
+    """Start an in-process gallery server for grouped review units."""
+    running = gallery_server.create_server(review_units_dir)
+    try:
+        yield running
+    finally:
+        running.shutdown()
+        if os.path.exists(running.db_path):
+            os.unlink(running.db_path)
+
+
+@pytest.fixture
+def parroty_artifacts_dir():
+    """Create a small parroty-style artifacts tree for conversion tests."""
+    d = tempfile.mkdtemp(prefix="bugshot_parroty_")
+
+    png_bytes = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx"
+        b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+    unit_dir = os.path.join(d, "logo-sample")
+    os.makedirs(unit_dir, exist_ok=True)
+    for name in [
+        "source-crop.png",
+        "input-minus-svg.png",
+        "svg-minus-input.png",
+        "difference-overlay.png",
+    ]:
+        with open(os.path.join(unit_dir, name), "wb") as f:
+            f.write(png_bytes)
+
+    with open(os.path.join(unit_dir, "final.svg"), "w", encoding="utf-8") as f:
+        f.write(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+            '<rect width="10" height="10" fill="#222"/></svg>'
+        )
+
+    with open(os.path.join(unit_dir, "report.json"), "w", encoding="utf-8") as f:
+        f.write(
+            """
+{
+  "input": "/tmp/logo-sample.png",
+  "output": "/tmp/logo-sample.svg",
+  "mode": "balanced",
+  "text_mode": "auto",
+  "comparison_scale": 2,
+  "mask_method": "border-kmeans3-label1",
+  "original_size": [243, 234],
+  "trimmed_size": [209, 213],
+  "crop_box": [16, 9, 225, 222],
+  "warnings": [],
+  "detected_text_regions": [{"text": "COLLEGE", "confidence": 0.98}],
+  "selected": {
+    "name": "path-text-contour-boundary-smooth",
+    "backend": "boundary-smoothed-bezier-contours",
+    "visual_error": 0.048742581435797294,
+    "rgb_error": 0.036178890615701675,
+    "alpha_error": 0.03066275641322136,
+    "mask_error": 0.04011388907608329,
+    "edge_error": 0.10034687817471077,
+    "sdf_error": 0.04586036503314972,
+    "shape_error": 0.06217411282456069,
+    "topology_error": 0.2,
+    "bytes": 3886,
+    "elements": 1,
+    "path_commands": 124,
+    "cubic_segments": 85,
+    "line_segments": 39,
+    "text_strategy": "path-text",
+    "text_elements": 0,
+    "text_regions": 0
+  }
+}
+""".strip()
+        )
+
+    with open(os.path.join(unit_dir, "index.html"), "w", encoding="utf-8") as f:
+        f.write("<html><body>preview</body></html>")
+
+    with open(os.path.join(d, "batch-report.json"), "w", encoding="utf-8") as f:
+        f.write(
+            """
+{
+  "count": 1,
+  "failed": 0,
+  "input": "/tmp/samples",
+  "items": [
+    {
+      "artifacts": "/tmp/logo-sample",
+      "input": "/tmp/logo-sample.png",
+      "output": "/tmp/logo-sample.svg",
+      "report": "/tmp/logo-sample.report.json",
+      "selected": {
+        "backend": "boundary-smoothed-bezier-contours",
+        "bytes": 3886,
+        "visual_error": 0.048742581435797294
+      }
+    }
+  ],
+  "succeeded": 1
+}
+""".strip()
+        )
+
+    with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
+        f.write("<html><body>batch preview</body></html>")
+
+    yield d
+    shutil.rmtree(d)
