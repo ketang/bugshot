@@ -77,7 +77,7 @@ def codex_manifest(version: str) -> dict:
         "repository": REPO_URL,
         "license": LICENSE,
         "keywords": KEYWORDS,
-        "skills": ".",
+        "skills": "./skills/bugshot",
         "interface": {
             "displayName": DISPLAY_NAME,
             "shortDescription": SHORT_DESCRIPTION,
