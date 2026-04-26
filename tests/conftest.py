@@ -1,7 +1,10 @@
 import os
 import shutil
+import stat
+import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +13,39 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 import gallery_server  # noqa: E402
+
+
+@pytest.fixture
+def fake_git_worktree(tmp_path: Path) -> Path:
+    """Create a real git repo with one commit so vizline can resolve refs."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "test@example"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "test"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "commit.gpgsign", "false"], check=True)
+    (tmp_path / ".gitkeep").write_text("")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-q", "-m", "init"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "branch", "-M", "main"], check=True)
+    return tmp_path
+
+
+@pytest.fixture
+def fake_capture_command(fake_git_worktree: Path) -> Path:
+    """Install a deterministic capture-command and commit it on main."""
+    viz = fake_git_worktree / ".agent-plugins/bento/bugshot/viz"
+    viz.mkdir(parents=True)
+    script = viz / "capture-command"
+    script.write_text(
+        "#!/bin/sh\n"
+        "out=\"$1\"\n"
+        "mkdir -p \"$out/pages/login\"\n"
+        "printf 'BASE-LOGIN' > \"$out/pages/login/desktop.png\"\n"
+        "printf 'BASE-WELCOME' > \"$out/pages/welcome.png\"\n"
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "commit", "-q", "-m", "add capture"], check=True)
+    return script
 
 
 @pytest.fixture
