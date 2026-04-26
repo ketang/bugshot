@@ -19,7 +19,7 @@
     var SHORTCUT_KEY_MODE_PREV = "M";
     var VIZDIFF_MODE_KEY = "bugshot:vizdiff:mode";
     var VIZDIFF_MODES = ["side-by-side", "swipe", "onion", "diff"];
-    var SHORTCUT_KEY_CYCLE_TOOL = "t";
+    var SHORTCUT_KEY_CYCLE_TOOL = "d";
     var TOOL_OFF = "off";
     var TOOL_RECT = "rect";
     var TOOL_PATH = "path";
@@ -1095,7 +1095,8 @@
         if (!unit || !unit.assets || unit.assets.length !== 1) {
             return false;
         }
-        return unit.assets[0].type === "image";
+        var assetType = unit.assets[0].type;
+        return assetType === "image" || assetType === "svg";
     }
 
     function setupRegionDrawing(unit, assetsContainer) {

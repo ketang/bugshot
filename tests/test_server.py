@@ -471,12 +471,12 @@ def test_detail_page_includes_tools_toolbar_markup(server):
     assert 'data-tool="path"' in body
     assert 'data-tool="off"' in body
     assert 'id="pending-region-indicator"' in body
-    assert "t cycle tool" in body
+    assert "d cycle tool" in body
 
 
 def test_gallery_js_wires_region_tool_shortcut(repo_root):
     script = open(f"{repo_root}/static/gallery.js").read()
-    assert 'SHORTCUT_KEY_CYCLE_TOOL = "t"' in script
+    assert 'SHORTCUT_KEY_CYCLE_TOOL = "d"' in script
     assert 'TOOL_OFF = "off"' in script
     assert 'TOOL_RECT = "rect"' in script
     assert 'TOOL_PATH = "path"' in script
