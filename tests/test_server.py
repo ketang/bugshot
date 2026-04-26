@@ -461,3 +461,14 @@ def test_patch_comment_omits_region_preserves_existing(server):
     )
     assert status == 200
     assert body["region"] == region
+
+
+def test_detail_page_includes_tools_toolbar_markup(server):
+    resp = urllib.request.urlopen(f"{server.url}/view/alpha.png")
+    body = resp.read().decode()
+    assert 'id="detail-tools"' in body
+    assert 'data-tool="rect"' in body
+    assert 'data-tool="path"' in body
+    assert 'data-tool="off"' in body
+    assert 'id="pending-region-indicator"' in body
+    assert "t cycle tool" in body
