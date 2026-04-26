@@ -14,11 +14,34 @@
     var SHORTCUT_KEY_COPY_FILENAME = "c";
     var SHORTCUT_KEY_ENTER = "Enter";
     var SHORTCUT_KEY_GO_TO = "g";
+    var SHORTCUT_KEY_TOGGLE_UNCHANGED = "u";
+    var SHORTCUT_KEY_MODE_NEXT = "m";
+    var SHORTCUT_KEY_MODE_PREV = "M";
+    var VIZDIFF_MODE_KEY = "bugshot:vizdiff:mode";
+    var VIZDIFF_MODES = ["side-by-side", "swipe", "onion", "diff"];
     var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    var VIZDIFF_FILTER_KEY = "bugshot:vizdiff:filters";
+    var VIZDIFF_DEFAULT_FILTERS = {
+        changed: true,
+        added: true,
+        removed: true,
+        unchanged: false
+    };
+    var VIZDIFF_CLASS_ORDER = ["changed", "added", "removed", "unchanged"];
+    var THEME_STORAGE_KEY = "bugshot-theme";
+    var THEME_ORDER = [
+        { id: "mono-light", label: "Light", tone: "light", swapColor: "#161311" },
+        { id: "mono-dark", label: "Dark", tone: "dark", swapColor: "#f1eee9" },
+        { id: "paper", label: "Paper", tone: "light", swapColor: "#211915" },
+        { id: "ocean", label: "Ocean", tone: "dark", swapColor: "#eef4ff" },
+        { id: "moss", label: "Moss", tone: "dark", swapColor: "#eef5e8" }
+    ];
 
-    var isIndex = !!window.__BUGSHOT_IMAGES__;
+    var isIndex = !!window.__BUGSHOT_UNITS__;
     var isDetail = !!window.__BUGSHOT_DETAIL__;
-    var detail = window.__BUGSHOT_DETAIL__ || null;
+    var detailPage = window.__BUGSHOT_DETAIL__ || null;
+    var currentUnit = detailPage ? detailPage.unit : null;
+    var currentTheme = loadThemeId();
     var isInternalNavigation = false;
     var jumpModal = null;
     var jumpModalInput = null;
@@ -28,8 +51,14 @@
     var isServerReachable = true;
     var serverActionButtons = [];
     var copyFilenameStatusTimeout = null;
+    var vizdiffActive = false;
+    var vizdiffFilters = null;
+    var vizdiffUnits = null;
+    var vizdiffDetailActive = false;
 
+    applyTheme(currentTheme, false);
     initServerStatusBanner();
+    initThemeControls();
     checkServerHeartbeat();
     setInterval(checkServerHeartbeat, HEARTBEAT_INTERVAL_MS);
 
@@ -74,6 +103,15 @@
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
             event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_TOGGLE_UNCHANGED && isIndex && vizdiffActive) {
+            toggleVizdiffUnchangedFilter();
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_MODE_NEXT && isDetail && vizdiffDetailActive) {
+            cycleVizdiffMode(1);
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_MODE_PREV && isDetail && vizdiffDetailActive) {
+            cycleVizdiffMode(-1);
+            event.preventDefault();
         } else if (DIGIT_KEYS.indexOf(event.key) !== -1) {
             navigateToImageByShortcut(event.key);
             event.preventDefault();
@@ -85,23 +123,23 @@
             event.preventDefault();
         } else if (
             isDetail &&
-            detail.nav.next &&
+            detailPage.nav.next &&
             (
                 event.key === SHORTCUT_KEY_NEXT ||
                 (!hasModifier && event.key === SHORTCUT_KEY_NEXT_ALTERNATE)
             )
         ) {
-            navigateTo(detail.nav.next);
+            navigateTo(detailPage.nav.next);
             event.preventDefault();
         } else if (
             isDetail &&
-            detail.nav.prev &&
+            detailPage.nav.prev &&
             (
                 event.key === SHORTCUT_KEY_PREVIOUS ||
                 (!hasModifier && event.key === SHORTCUT_KEY_PREVIOUS_ALTERNATE)
             )
         ) {
-            navigateTo(detail.nav.prev);
+            navigateTo(detailPage.nav.prev);
             event.preventDefault();
         } else if (
             event.key === SHORTCUT_KEY_COPY_FILENAME &&
@@ -159,6 +197,79 @@
         document.body.insertBefore(serverStatusBanner, document.body.firstChild);
     }
 
+    function initThemeControls() {
+        [document.getElementById("index-theme-controls"), document.getElementById("detail-theme-controls")]
+            .filter(Boolean)
+            .forEach(function (container) {
+                container.textContent = "";
+                container.classList.add("theme-controls-ready");
+                THEME_ORDER.forEach(function (theme) {
+                    var button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "theme-button";
+                    button.dataset.themeId = theme.id;
+                    button.title = theme.label;
+                    button.setAttribute("aria-label", theme.label);
+                    button.textContent = theme.label;
+                    button.addEventListener("click", function () {
+                        applyTheme(theme.id, true);
+                    });
+                    container.appendChild(button);
+                });
+            });
+
+        syncThemeButtons();
+    }
+
+    function loadThemeId() {
+        try {
+            return localStorage.getItem(THEME_STORAGE_KEY) || THEME_ORDER[1].id;
+        } catch (error) {
+            return THEME_ORDER[1].id;
+        }
+    }
+
+    function applyTheme(themeId, persist) {
+        if (!findTheme(themeId)) {
+            themeId = THEME_ORDER[1].id;
+        }
+
+        currentTheme = themeId;
+        document.body.dataset.theme = themeId;
+        syncThemeButtons();
+        rerenderSvgAssets();
+
+        if (!persist) {
+            return;
+        }
+
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, themeId);
+        } catch (error) {
+        }
+    }
+
+    function syncThemeButtons() {
+        Array.prototype.slice.call(document.querySelectorAll(".theme-button")).forEach(function (button) {
+            var isActive = button.dataset.themeId === currentTheme;
+            button.classList.toggle("is-active", isActive);
+            button.setAttribute("aria-pressed", isActive ? "true" : "false");
+        });
+    }
+
+    function findTheme(themeId) {
+        for (var index = 0; index < THEME_ORDER.length; index += 1) {
+            if (THEME_ORDER[index].id === themeId) {
+                return THEME_ORDER[index];
+            }
+        }
+        return null;
+    }
+
+    function currentThemeDefinition() {
+        return findTheme(currentTheme) || THEME_ORDER[1];
+    }
+
     function checkServerHeartbeat() {
         fetch("/api/heartbeat", { method: "POST" })
             .then(requireOkResponse)
@@ -209,8 +320,8 @@
         jumpModal.className = "jump-modal is-hidden";
         jumpModal.innerHTML =
             '<div class="jump-modal-card" role="dialog" aria-modal="true" aria-labelledby="jump-modal-title">' +
-            '<div class="jump-modal-title" id="jump-modal-title">Go to image</div>' +
-            '<div class="jump-modal-copy">Type any image number and press Enter.</div>' +
+            '<div class="jump-modal-title" id="jump-modal-title">Go to unit</div>' +
+            '<div class="jump-modal-copy">Type any unit number and press Enter.</div>' +
             '<form class="jump-modal-form" id="jump-modal-form">' +
             '<input class="jump-modal-input" id="jump-modal-input" inputmode="numeric" autocomplete="off" />' +
             '<button type="submit" class="btn">Go</button>' +
@@ -245,7 +356,7 @@
                 var message = document.createElement("div");
                 message.style.cssText =
                     "display:flex;align-items:center;justify-content:center;" +
-                    "height:100vh;color:#e0e0e0;font-size:18px;";
+                    "height:100vh;color:var(--text-color);font-size:18px;";
                 message.textContent = "Session complete. You can close this tab.";
                 document.body.appendChild(message);
             })
@@ -255,82 +366,733 @@
     }
 
     function initIndex() {
-        var images = window.__BUGSHOT_IMAGES__;
-        var gallery = document.getElementById("gallery");
+        var units = window.__BUGSHOT_UNITS__;
+        vizdiffUnits = units;
+        vizdiffActive = units.some(function (u) { return !!u.vizdiff; });
 
-        images.forEach(function (imageInfo) {
+        if (vizdiffActive) {
+            vizdiffFilters = loadVizdiffFilters(units);
+            renderVizdiffFilterBar();
+        }
+
+        renderIndexTiles();
+    }
+
+    function renderIndexTiles() {
+        var units = vizdiffUnits || window.__BUGSHOT_UNITS__;
+        var gallery = document.getElementById("gallery");
+        gallery.replaceChildren();
+
+        var visible = vizdiffActive
+            ? applyVizdiffFilters(units, vizdiffFilters)
+            : units;
+
+        visible.forEach(function (unitInfo) {
             var item = document.createElement("a");
             item.className = "gallery-item";
-            item.href = "/view/" + imageInfo.encoded_name;
+            item.href = "/view/" + unitInfo.encoded_id;
+            if (unitInfo.vizdiff) {
+                item.dataset.cls = unitInfo.vizdiff.classification;
+            }
             bindInternalNavigation(item);
 
-            if (imageInfo.type === "image") {
-                var imageElement = document.createElement("img");
-                imageElement.src = imageInfo.src;
-                imageElement.alt = imageInfo.name;
-                item.appendChild(imageElement);
-            } else {
-                var previewDiv = document.createElement("div");
-                previewDiv.className = "ansi-preview";
-                var previewPre = document.createElement("pre");
-                previewPre.innerHTML = imageInfo.preview_html;
-                previewDiv.appendChild(previewPre);
-                item.appendChild(previewDiv);
+            if (unitInfo.vizdiff) {
+                var badge = document.createElement("span");
+                badge.className = "tile-badge";
+                badge.dataset.cls = unitInfo.vizdiff.classification;
+                badge.textContent = unitInfo.vizdiff.classification.toUpperCase();
+                item.appendChild(badge);
             }
+
+            appendAssetPreview(item, unitInfo.primary_asset, true);
 
             var label = document.createElement("div");
             label.className = "item-label";
-            label.textContent = imageInfo.name;
+            label.textContent = unitInfo.label;
             item.appendChild(label);
+
+            var meta = document.createElement("div");
+            meta.className = "item-meta";
+            meta.textContent = describeUnit(unitInfo);
+            item.appendChild(meta);
 
             gallery.appendChild(item);
         });
     }
 
-    function navigateToFirstImage() {
-        var images = getAvailableImages();
-        if (!images.length) {
+    function loadVizdiffFilters(units) {
+        var stored = null;
+        try {
+            stored = JSON.parse(localStorage.getItem(VIZDIFF_FILTER_KEY) || "null");
+        } catch (e) {
+            stored = null;
+        }
+        var filters = stored && typeof stored === "object"
+            ? Object.assign({}, VIZDIFF_DEFAULT_FILTERS, stored)
+            : Object.assign({}, VIZDIFF_DEFAULT_FILTERS);
+
+        var counts = countVizdiffByClass(units);
+        if (counts.changed === 0 && counts.added === 0 && counts.removed === 0) {
+            filters = { changed: true, added: true, removed: true, unchanged: true };
+        }
+        return filters;
+    }
+
+    function persistVizdiffFilters() {
+        try {
+            localStorage.setItem(VIZDIFF_FILTER_KEY, JSON.stringify(vizdiffFilters));
+        } catch (e) {
+            // localStorage unavailable; no-op.
+        }
+    }
+
+    function countVizdiffByClass(units) {
+        var counts = { changed: 0, added: 0, removed: 0, unchanged: 0 };
+        units.forEach(function (u) {
+            if (u.vizdiff && counts.hasOwnProperty(u.vizdiff.classification)) {
+                counts[u.vizdiff.classification] += 1;
+            }
+        });
+        return counts;
+    }
+
+    function applyVizdiffFilters(units, filters) {
+        var visible = units.filter(function (u) {
+            if (!u.vizdiff) {
+                return true;
+            }
+            return !!filters[u.vizdiff.classification];
+        });
+        visible.sort(function (a, b) {
+            var au = a.vizdiff && a.vizdiff.classification === "unchanged" ? 1 : 0;
+            var bu = b.vizdiff && b.vizdiff.classification === "unchanged" ? 1 : 0;
+            if (au !== bu) {
+                return au - bu;
+            }
+            return (a.label || "").localeCompare(b.label || "");
+        });
+        return visible;
+    }
+
+    function renderVizdiffFilterBar() {
+        var bar = document.getElementById("filter-bar");
+        if (!bar) {
             return;
         }
-        navigateTo("/view/" + images[0].encoded_name);
+        bar.hidden = false;
+        bar.replaceChildren();
+
+        var counts = countVizdiffByClass(vizdiffUnits);
+        VIZDIFF_CLASS_ORDER.forEach(function (cls) {
+            var chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "filter-chip";
+            chip.dataset.cls = cls;
+            chip.dataset.active = String(!!vizdiffFilters[cls]);
+
+            var label = document.createElement("span");
+            label.className = "label";
+            label.textContent = cls.toUpperCase();
+            chip.appendChild(label);
+
+            var count = document.createElement("span");
+            count.className = "count";
+            count.textContent = String(counts[cls] || 0);
+            chip.appendChild(count);
+
+            chip.addEventListener("click", function () {
+                vizdiffFilters[cls] = !vizdiffFilters[cls];
+                chip.dataset.active = String(!!vizdiffFilters[cls]);
+                persistVizdiffFilters();
+                renderIndexTiles();
+            });
+            bar.appendChild(chip);
+        });
+    }
+
+    function toggleVizdiffUnchangedFilter() {
+        if (!vizdiffFilters) {
+            return;
+        }
+        vizdiffFilters.unchanged = !vizdiffFilters.unchanged;
+        persistVizdiffFilters();
+        var chip = document.querySelector('.filter-chip[data-cls="unchanged"]');
+        if (chip) {
+            chip.dataset.active = String(!!vizdiffFilters.unchanged);
+        }
+        renderIndexTiles();
+    }
+
+    function initVizdiffDetailModes(unit) {
+        var vd = unit && unit.vizdiff;
+        if (!vd || !vd.base_asset || !vd.head_asset) {
+            return;
+        }
+        var baseAsset = assetByName(unit, vd.base_asset);
+        if (!baseAsset) {
+            return;
+        }
+        if (baseAsset.type === "ansi") {
+            // ANSI units only support side-by-side rendering of the existing
+            // asset cards; the canvas modes have no pixel grid to subtract.
+            return;
+        }
+
+        vizdiffDetailActive = true;
+        var modeBar = document.getElementById("mode-bar");
+        var pane = document.getElementById("viewer-pane");
+        if (!modeBar || !pane) {
+            return;
+        }
+        modeBar.hidden = false;
+        pane.hidden = false;
+
+        var overlayToggle = document.getElementById("overlay-toggle");
+        if (overlayToggle) {
+            overlayToggle.checked = false;
+            overlayToggle.addEventListener("change", function () {
+                renderVizdiffMode(loadVizdiffMode(), unit);
+            });
+        }
+
+        Array.prototype.forEach.call(
+            modeBar.querySelectorAll(".mode-button"),
+            function (btn) {
+                btn.addEventListener("click", function () {
+                    setVizdiffMode(btn.dataset.mode, unit);
+                });
+            }
+        );
+
+        setVizdiffMode(loadVizdiffMode(), unit);
+    }
+
+    function loadVizdiffMode() {
+        try {
+            var stored = localStorage.getItem(VIZDIFF_MODE_KEY);
+            if (stored && VIZDIFF_MODES.indexOf(stored) !== -1) {
+                return stored;
+            }
+        } catch (e) {
+            // ignored
+        }
+        return "side-by-side";
+    }
+
+    function setVizdiffMode(mode, unit) {
+        if (VIZDIFF_MODES.indexOf(mode) === -1) {
+            mode = "side-by-side";
+        }
+        try {
+            localStorage.setItem(VIZDIFF_MODE_KEY, mode);
+        } catch (e) {
+            // ignored
+        }
+        Array.prototype.forEach.call(
+            document.querySelectorAll(".mode-button"),
+            function (btn) {
+                btn.dataset.active = String(btn.dataset.mode === mode);
+            }
+        );
+        renderVizdiffMode(mode, unit);
+    }
+
+    function cycleVizdiffMode(delta) {
+        var current = loadVizdiffMode();
+        var idx = VIZDIFF_MODES.indexOf(current);
+        if (idx === -1) {
+            idx = 0;
+        }
+        var next = (idx + delta + VIZDIFF_MODES.length) % VIZDIFF_MODES.length;
+        setVizdiffMode(VIZDIFF_MODES[next], currentUnit);
+    }
+
+    function renderVizdiffMode(mode, unit) {
+        var pane = document.getElementById("viewer-pane");
+        if (!pane) {
+            return;
+        }
+        pane.replaceChildren();
+        var base = assetByName(unit, unit.vizdiff.base_asset);
+        var head = assetByName(unit, unit.vizdiff.head_asset);
+        switch (mode) {
+            case "side-by-side":
+                renderVizdiffSideBySide(pane, base, head);
+                break;
+            case "swipe":
+                renderVizdiffSwipe(pane, base, head);
+                break;
+            case "onion":
+                renderVizdiffOnion(pane, base, head);
+                break;
+            case "diff":
+                renderVizdiffDiff(pane, base, head);
+                break;
+        }
+    }
+
+    function assetByName(unit, name) {
+        if (!unit || !name) {
+            return null;
+        }
+        for (var i = 0; i < unit.assets.length; i++) {
+            if (unit.assets[i].name === name) {
+                return unit.assets[i];
+            }
+        }
+        return null;
+    }
+
+    function buildSideFigure(label, asset) {
+        var fig = document.createElement("figure");
+        fig.className = "vizdiff-figure";
+        var cap = document.createElement("figcaption");
+        cap.textContent = label;
+        fig.appendChild(cap);
+        var img = document.createElement("img");
+        img.src = asset.src;
+        img.alt = asset.name;
+        fig.appendChild(img);
+        return fig;
+    }
+
+    function renderVizdiffSideBySide(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-side-by-side";
+        wrap.appendChild(buildSideFigure("Base", base));
+        wrap.appendChild(buildSideFigure("Head", head));
+        pane.appendChild(wrap);
+        if (overlayEnabled()) {
+            applyOverlayToFigure(wrap.lastChild, base, head);
+        }
+    }
+
+    function overlayEnabled() {
+        var toggle = document.getElementById("overlay-toggle");
+        return !!(toggle && toggle.checked);
+    }
+
+    function applyOverlayToFigure(figure, base, head) {
+        loadImagePair(base, head, function (baseImg, headImg) {
+            if (baseImg.naturalWidth !== headImg.naturalWidth ||
+                baseImg.naturalHeight !== headImg.naturalHeight) {
+                return;
+            }
+            var canvas = document.createElement("canvas");
+            canvas.className = "vizdiff-overlay-canvas";
+            canvas.width = headImg.naturalWidth;
+            canvas.height = headImg.naturalHeight;
+            paintOverlay(canvas, baseImg, headImg);
+            figure.appendChild(canvas);
+        });
+    }
+
+    function paintOverlay(canvas, baseImg, headImg) {
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(headImg, 0, 0);
+        var headData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(baseImg, 0, 0);
+        var baseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var out = ctx.createImageData(canvas.width, canvas.height);
+        for (var i = 0; i < headData.data.length; i += 4) {
+            var dr = Math.abs(headData.data[i] - baseData.data[i]);
+            var dg = Math.abs(headData.data[i + 1] - baseData.data[i + 1]);
+            var db = Math.abs(headData.data[i + 2] - baseData.data[i + 2]);
+            var diff = dr + dg + db;
+            if (diff > 6) {
+                out.data[i] = 239;
+                out.data[i + 1] = 68;
+                out.data[i + 2] = 68;
+                out.data[i + 3] = 160;
+            }
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.putImageData(out, 0, 0);
+    }
+
+    function renderVizdiffSwipe(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-swipe-wrap";
+        var stage = document.createElement("div");
+        stage.className = "vizdiff-swipe-stage";
+
+        var baseImg = document.createElement("img");
+        baseImg.className = "vizdiff-swipe-base";
+        baseImg.src = base.src;
+        baseImg.alt = base.name;
+
+        var headImg = document.createElement("img");
+        headImg.className = "vizdiff-swipe-head";
+        headImg.src = head.src;
+        headImg.alt = head.name;
+
+        var handle = document.createElement("div");
+        handle.className = "vizdiff-swipe-handle";
+
+        stage.appendChild(baseImg);
+        stage.appendChild(headImg);
+        stage.appendChild(handle);
+        wrap.appendChild(stage);
+
+        var note = document.createElement("p");
+        note.className = "vizdiff-mode-note";
+        note.textContent = "Drag the handle to swipe between base (left) and head (right).";
+        wrap.appendChild(note);
+
+        pane.appendChild(wrap);
+
+        var split = 0.5;
+        function applySplit() {
+            var pct = (split * 100).toFixed(2) + "%";
+            headImg.style.clipPath = "inset(0 0 0 " + pct + ")";
+            handle.style.left = pct;
+        }
+        applySplit();
+
+        function onMove(clientX) {
+            var rect = stage.getBoundingClientRect();
+            if (rect.width <= 0) {
+                return;
+            }
+            split = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            applySplit();
+        }
+        handle.addEventListener("pointerdown", function (event) {
+            event.preventDefault();
+            handle.setPointerCapture(event.pointerId);
+            function onPointerMove(e) {
+                onMove(e.clientX);
+            }
+            function onPointerUp(e) {
+                handle.releasePointerCapture(event.pointerId);
+                handle.removeEventListener("pointermove", onPointerMove);
+                handle.removeEventListener("pointerup", onPointerUp);
+            }
+            handle.addEventListener("pointermove", onPointerMove);
+            handle.addEventListener("pointerup", onPointerUp);
+        });
+    }
+
+    function renderVizdiffOnion(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-onion-wrap";
+        var stage = document.createElement("div");
+        stage.className = "vizdiff-onion-stage";
+
+        var baseImg = document.createElement("img");
+        baseImg.className = "vizdiff-onion-base";
+        baseImg.src = base.src;
+        baseImg.alt = base.name;
+
+        var headImg = document.createElement("img");
+        headImg.className = "vizdiff-onion-head";
+        headImg.src = head.src;
+        headImg.alt = head.name;
+
+        stage.appendChild(baseImg);
+        stage.appendChild(headImg);
+
+        var controls = document.createElement("div");
+        controls.className = "vizdiff-onion-controls";
+        var label = document.createElement("label");
+        label.textContent = "Head opacity";
+        var slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = "0";
+        slider.max = "100";
+        slider.value = "50";
+        slider.addEventListener("input", function () {
+            headImg.style.opacity = String(slider.value / 100);
+        });
+        headImg.style.opacity = "0.5";
+        controls.appendChild(label);
+        controls.appendChild(slider);
+
+        wrap.appendChild(stage);
+        wrap.appendChild(controls);
+        pane.appendChild(wrap);
+    }
+
+    function renderVizdiffDiff(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-diff-wrap";
+        var canvas = document.createElement("canvas");
+        canvas.className = "vizdiff-diff-canvas";
+        wrap.appendChild(canvas);
+
+        var note = document.createElement("p");
+        note.className = "vizdiff-mode-note";
+        note.textContent = "Pixels glow where base and head differ.";
+        wrap.appendChild(note);
+        pane.appendChild(wrap);
+
+        loadImagePair(base, head, function (baseImg, headImg) {
+            if (baseImg.naturalWidth !== headImg.naturalWidth ||
+                baseImg.naturalHeight !== headImg.naturalHeight) {
+                note.textContent =
+                    "Diff image unavailable: base and head dimensions differ.";
+                return;
+            }
+            canvas.width = baseImg.naturalWidth;
+            canvas.height = baseImg.naturalHeight;
+            paintDiffCanvas(canvas, baseImg, headImg);
+        });
+    }
+
+    function paintDiffCanvas(canvas, baseImg, headImg) {
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(baseImg, 0, 0);
+        var baseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(headImg, 0, 0);
+        var headData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var out = ctx.createImageData(canvas.width, canvas.height);
+        for (var i = 0; i < headData.data.length; i += 4) {
+            var dr = Math.abs(headData.data[i] - baseData.data[i]);
+            var dg = Math.abs(headData.data[i + 1] - baseData.data[i + 1]);
+            var db = Math.abs(headData.data[i + 2] - baseData.data[i + 2]);
+            out.data[i] = Math.min(255, dr * 4);
+            out.data[i + 1] = Math.min(255, dg * 4);
+            out.data[i + 2] = Math.min(255, db * 4);
+            out.data[i + 3] = 255;
+        }
+        ctx.putImageData(out, 0, 0);
+    }
+
+    function loadImagePair(base, head, callback) {
+        var baseImg = new Image();
+        var headImg = new Image();
+        var loaded = 0;
+        function maybeReady() {
+            loaded += 1;
+            if (loaded === 2) {
+                callback(baseImg, headImg);
+            }
+        }
+        baseImg.onload = maybeReady;
+        headImg.onload = maybeReady;
+        baseImg.onerror = function () { /* skip */ };
+        headImg.onerror = function () { /* skip */ };
+        baseImg.src = base.src;
+        headImg.src = head.src;
+    }
+
+    function appendAssetPreview(container, asset, isPreview) {
+        if (asset.type === "image") {
+            var imageElement = document.createElement("img");
+            imageElement.src = asset.src;
+            imageElement.alt = asset.name;
+            container.appendChild(imageElement);
+            return;
+        }
+
+        if (asset.type === "svg") {
+            container.appendChild(createSvgPreview(asset, isPreview));
+            return;
+        }
+
+        var previewDiv = document.createElement("div");
+        previewDiv.className = isPreview ? "ansi-preview" : "ansi-rendered";
+        var previewPre = document.createElement("pre");
+        previewPre.innerHTML = asset.rendered_html;
+        previewDiv.appendChild(previewPre);
+        container.appendChild(previewDiv);
+    }
+
+    function createSvgPreview(asset, isPreview) {
+        var wrapper = document.createElement("div");
+        wrapper.className = isPreview ? "svg-preview" : "svg-rendered";
+        wrapper.dataset.svgMarkup = asset.svg_markup || "";
+        wrapper.dataset.primaryColor = asset.primary_color || "";
+        wrapper.dataset.fallbackSrc = asset.src || "";
+        renderSvgIntoWrapper(wrapper);
+        return wrapper;
+    }
+
+    function renderSvgIntoWrapper(wrapper) {
+        var svgMarkup = wrapper.dataset.svgMarkup || "";
+        var fallbackSrc = wrapper.dataset.fallbackSrc || "";
+        wrapper.textContent = "";
+
+        if (!svgMarkup) {
+            renderSvgFallback(wrapper, fallbackSrc);
+            return;
+        }
+
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(svgMarkup, "image/svg+xml");
+        var root = doc.documentElement;
+
+        if (!root || root.nodeName.toLowerCase() === "parsererror") {
+            renderSvgFallback(wrapper, fallbackSrc);
+            return;
+        }
+
+        var primaryColor = wrapper.dataset.primaryColor || "";
+        var swapColor = themeSwapColor(primaryColor);
+        if (swapColor) {
+            rewriteSvgPrimaryColor(root, primaryColor, swapColor);
+        }
+
+        root.classList.add("svg-asset");
+        wrapper.appendChild(document.importNode(root, true));
+    }
+
+    function renderSvgFallback(wrapper, src) {
+        var fallback = document.createElement("img");
+        fallback.src = src;
+        fallback.alt = "SVG asset";
+        wrapper.appendChild(fallback);
+    }
+
+    function themeSwapColor(primaryColor) {
+        if (!primaryColor) {
+            return null;
+        }
+
+        var theme = currentThemeDefinition();
+        var luminance = colorLuminance(primaryColor);
+        if (luminance === null) {
+            return null;
+        }
+
+        if (theme.tone === "light" && luminance >= 0.68) {
+            return theme.swapColor;
+        }
+
+        if (theme.tone === "dark" && luminance <= 0.38) {
+            return theme.swapColor;
+        }
+
+        return null;
+    }
+
+    function colorLuminance(hexColor) {
+        var match = /^#?([0-9a-f]{6})$/i.exec(hexColor);
+        if (!match) {
+            return null;
+        }
+
+        var value = match[1];
+        var channels = [
+            parseInt(value.slice(0, 2), 16) / 255,
+            parseInt(value.slice(2, 4), 16) / 255,
+            parseInt(value.slice(4, 6), 16) / 255
+        ];
+
+        for (var index = 0; index < channels.length; index += 1) {
+            channels[index] = channels[index] <= 0.03928
+                ? channels[index] / 12.92
+                : Math.pow((channels[index] + 0.055) / 1.055, 2.4);
+        }
+
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    }
+
+    function rewriteSvgPrimaryColor(root, primaryColor, swapColor) {
+        Array.prototype.slice.call(root.querySelectorAll("*")).concat([root]).forEach(function (node) {
+            rewriteSvgPresentationAttributes(node, primaryColor, swapColor);
+        });
+        root.setAttribute("color", swapColor);
+    }
+
+    function rewriteSvgPresentationAttributes(node, primaryColor, swapColor) {
+        ["fill", "stroke"].forEach(function (attrName) {
+            var attrValue = node.getAttribute(attrName);
+            if (normalizeColor(attrValue) === primaryColor) {
+                node.setAttribute(attrName, "currentColor");
+            }
+        });
+
+        var styleValue = node.getAttribute("style");
+        if (!styleValue) {
+            return;
+        }
+
+        var rewritten = styleValue.split(";").map(function (declaration) {
+            if (declaration.indexOf(":") === -1) {
+                return declaration;
+            }
+            var parts = declaration.split(":");
+            var key = parts[0].trim();
+            var value = parts.slice(1).join(":").trim();
+            if ((key === "fill" || key === "stroke") && normalizeColor(value) === primaryColor) {
+                return key + ": currentColor";
+            }
+            return declaration;
+        }).join(";");
+
+        node.setAttribute("style", rewritten);
+    }
+
+    function normalizeColor(value) {
+        if (!value) {
+            return null;
+        }
+
+        var normalized = String(value).trim().toLowerCase();
+        if (/^#[0-9a-f]{3}$/.test(normalized)) {
+            return "#" + normalized.charAt(1) + normalized.charAt(1) +
+                normalized.charAt(2) + normalized.charAt(2) +
+                normalized.charAt(3) + normalized.charAt(3);
+        }
+        if (/^#[0-9a-f]{6}$/.test(normalized)) {
+            return normalized;
+        }
+        return null;
+    }
+
+    function rerenderSvgAssets() {
+        Array.prototype.slice.call(document.querySelectorAll(".svg-preview, .svg-rendered")).forEach(function (wrapper) {
+            renderSvgIntoWrapper(wrapper);
+        });
+    }
+
+    function describeUnit(unitInfo) {
+        var pieces = [];
+        pieces.push(unitInfo.asset_count === 1 ? "1 asset" : unitInfo.asset_count + " assets");
+        if (unitInfo.metadata_count) {
+            pieces.push(unitInfo.metadata_count === 1 ? "1 metadata file" : unitInfo.metadata_count + " metadata files");
+        }
+        return pieces.join(" · ");
+    }
+
+    function navigateToFirstImage() {
+        var units = getAvailableImages();
+        if (!units.length) {
+            return;
+        }
+        navigateTo("/view/" + units[0].encoded_id);
     }
 
     function navigateToLastImage() {
-        var images = getAvailableImages();
-        if (!images.length) {
+        var units = getAvailableImages();
+        if (!units.length) {
             return;
         }
 
-        navigateTo("/view/" + images[images.length - 1].encoded_name);
+        navigateTo("/view/" + units[units.length - 1].encoded_id);
     }
 
     function initDetail() {
-        var container = document.getElementById("image-container");
+        var assetsContainer = document.getElementById("unit-assets");
+        var metadataContainer = document.getElementById("unit-metadata");
         var previousSlot = document.getElementById("prev-slot");
         var nextSlot = document.getElementById("next-slot");
         var indexButton = document.getElementById("index-btn");
         var copyFilenameButton = document.getElementById("copy-filename-btn");
 
-        if (detail.contentType === "image") {
-            var imageElement = document.createElement("img");
-            imageElement.src = detail.imageSrc;
-            imageElement.alt = detail.filename;
-            container.appendChild(imageElement);
-        } else {
-            var ansiDiv = document.createElement("div");
-            ansiDiv.className = "ansi-rendered";
-            var ansiPre = document.createElement("pre");
-            ansiPre.innerHTML = detail.ansiHtml;
-            ansiDiv.appendChild(ansiPre);
-            container.appendChild(ansiDiv);
-        }
+        currentUnit.assets.forEach(function (asset) {
+            assetsContainer.appendChild(createAssetCard(asset));
+        });
+
+        initVizdiffDetailModes(currentUnit);
 
         previousSlot.appendChild(
             createNavigationButton({
                 id: "prev-btn",
                 label: "Previous",
-                destination: detail.nav.prev,
-                detailName: detail.nav.prev_name,
+                destination: detailPage.nav.prev,
+                detailName: detailPage.nav.prev_label,
                 direction: "previous",
             })
         );
@@ -339,8 +1101,8 @@
             createNavigationButton({
                 id: "next-btn",
                 label: "Next",
-                destination: detail.nav.next,
-                detailName: detail.nav.next_name,
+                destination: detailPage.nav.next,
+                detailName: detailPage.nav.next_label,
                 direction: "next",
             })
         );
@@ -366,6 +1128,7 @@
             commentSubmit.disabled = !isServerReachable;
         }
 
+        renderMetadata(metadataContainer, currentUnit.metadata);
         loadComments();
 
         commentForm.addEventListener("submit", function (event) {
@@ -385,7 +1148,7 @@
             fetchJson("/api/comments", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ image: detail.filename, body: body }),
+                body: JSON.stringify({ unit_id: currentUnit.id, body: body }),
             })
                 .then(function (comment) {
                     commentInput.value = "";
@@ -399,7 +1162,7 @@
         });
 
         function loadComments() {
-            fetchJson("/api/comments?image=" + encodeURIComponent(detail.filename))
+            fetchJson("/api/comments?unit_id=" + encodeURIComponent(currentUnit.id))
                 .then(function (comments) {
                     commentsList.textContent = "";
                     commentStatus.textContent = "";
@@ -471,6 +1234,116 @@
         }
     }
 
+    function createAssetCard(asset) {
+        var card = document.createElement("section");
+        card.className = "asset-card";
+
+        var title = document.createElement("div");
+        title.className = "asset-title";
+        title.textContent = asset.name;
+        card.appendChild(title);
+
+        appendAssetPreview(card, asset, false);
+        return card;
+    }
+
+    function renderMetadata(container, metadataItems) {
+        if (!container) {
+            return;
+        }
+
+        container.textContent = "";
+        if (!metadataItems.length) {
+            container.classList.add("is-hidden");
+            return;
+        }
+
+        container.classList.remove("is-hidden");
+
+        metadataItems.forEach(function (item) {
+            var card = document.createElement("section");
+            card.className = "metadata-card";
+
+            var title = document.createElement("div");
+            title.className = "metadata-title";
+            title.textContent = item.name;
+            card.appendChild(title);
+
+            if (item.parse_error) {
+                var warning = document.createElement("div");
+                warning.className = "metadata-warning";
+                warning.textContent = item.parse_error;
+                card.appendChild(warning);
+            }
+
+            if (isRenderableMetadataTable(item.content)) {
+                card.appendChild(renderMetadataTable(item.content));
+            } else {
+                var body = document.createElement("pre");
+                body.className = "metadata-body";
+                body.textContent = item.display_text;
+                card.appendChild(body);
+            }
+
+            container.appendChild(card);
+        });
+    }
+
+    function isRenderableMetadataTable(content) {
+        return content && typeof content === "object" && !Array.isArray(content);
+    }
+
+    function renderMetadataTable(content) {
+        var table = document.createElement("table");
+        table.className = "metadata-table";
+
+        var head = document.createElement("thead");
+        var headRow = document.createElement("tr");
+        ["Field", "Value"].forEach(function (text) {
+            var cell = document.createElement("th");
+            cell.textContent = text;
+            headRow.appendChild(cell);
+        });
+        head.appendChild(headRow);
+        table.appendChild(head);
+
+        var body = document.createElement("tbody");
+        Object.keys(content).forEach(function (key) {
+            var row = document.createElement("tr");
+
+            var keyCell = document.createElement("th");
+            keyCell.className = "metadata-key";
+            keyCell.textContent = key;
+            row.appendChild(keyCell);
+
+            var valueCell = document.createElement("td");
+            valueCell.className = "metadata-value";
+            appendMetadataValue(valueCell, content[key]);
+            row.appendChild(valueCell);
+
+            body.appendChild(row);
+        });
+        table.appendChild(body);
+        return table;
+    }
+
+    function appendMetadataValue(cell, value) {
+        if (value === null || typeof value === "undefined") {
+            cell.textContent = "";
+            return;
+        }
+
+        if (typeof value === "object") {
+            var jsonValue = document.createElement("pre");
+            jsonValue.className = "metadata-cell-json";
+            jsonValue.textContent = JSON.stringify(value, null, 2);
+            cell.appendChild(jsonValue);
+            return;
+        }
+
+        cell.textContent = String(value);
+    }
+
     function bindInternalNavigation(link) {
         link.addEventListener("click", function () {
             isInternalNavigation = true;
@@ -509,22 +1382,22 @@
 
     function getAvailableImages() {
         if (isIndex) {
-            return window.__BUGSHOT_IMAGES__ || [];
+            return window.__BUGSHOT_UNITS__ || [];
         }
         if (isDetail) {
-            return detail.images || [];
+            return detailPage.units || [];
         }
         return [];
     }
 
     function navigateToImageByShortcut(key) {
-        var images = getAvailableImages();
-        if (!images.length) {
+        var units = getAvailableImages();
+        if (!units.length) {
             return;
         }
 
         if (key === "0") {
-            navigateTo("/view/" + images[images.length - 1].encoded_name);
+            navigateTo("/view/" + units[units.length - 1].encoded_id);
             return;
         }
 
@@ -533,15 +1406,15 @@
     }
 
     function navigateToImageNumber(imageNumber) {
-        var images = getAvailableImages();
-        if (!images.length) {
+        var units = getAvailableImages();
+        if (!units.length) {
             return false;
         }
-        if (!Number.isInteger(imageNumber) || imageNumber < 1 || imageNumber > images.length) {
+        if (!Number.isInteger(imageNumber) || imageNumber < 1 || imageNumber > units.length) {
             return false;
         }
 
-        navigateTo("/view/" + images[imageNumber - 1].encoded_name);
+        navigateTo("/view/" + units[imageNumber - 1].encoded_id);
         return true;
     }
 
@@ -573,12 +1446,12 @@
         var imageNumber = parseInt(rawValue, 10);
 
         if (!rawValue || !/^\d+$/.test(rawValue)) {
-            jumpModalError.textContent = "Enter a valid image number.";
+            jumpModalError.textContent = "Enter a valid unit number.";
             return;
         }
 
         if (!navigateToImageNumber(imageNumber)) {
-            jumpModalError.textContent = "That image number does not exist.";
+            jumpModalError.textContent = "That unit number does not exist.";
             return;
         }
     }
@@ -599,11 +1472,11 @@
     }
 
     function copyFilenameToClipboard() {
-        if (!isDetail || !detail) {
+        if (!isDetail || !currentUnit) {
             return;
         }
 
-        writeClipboardText(detail.filename)
+        writeClipboardText(currentUnit.id)
             .then(function () {
                 showCopyFilenameStatus("Copied", false);
             })

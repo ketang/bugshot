@@ -77,7 +77,7 @@ def codex_manifest(version: str) -> dict:
         "repository": REPO_URL,
         "license": LICENSE,
         "keywords": KEYWORDS,
-        "skills": "./skills/bugshot",
+        "skills": "./skills",
         "interface": {
             "displayName": DISPLAY_NAME,
             "shortDescription": SHORT_DESCRIPTION,
@@ -229,6 +229,44 @@ SKILL_FILES = [
     "ansi_render.py",
 ]
 
+# Per-skill build manifests. Each skill keeps a hand-edited
+# skills/<name>/SKILL.md (preserved verbatim by the build); build-plugin
+# refreshes the python file copies and any static/template trees the
+# skill needs at runtime.
+SKILL_PLUGINS = {
+    "bugshot": {
+        "files": SKILL_FILES,
+        "trees": ["static", "templates"],
+    },
+    "vizline": {
+        "files": [
+            "vizline_cli.py",
+            "vizline_workflow.py",
+            "baseline_manifest.py",
+            "capture_runner.py",
+            "image_diff.py",
+        ],
+        "trees": [],
+    },
+    # vizdiff vendors the gallery server because its CLI runs the bugshot
+    # session in-process to host the assembled review root.
+    "vizdiff": {
+        "files": [
+            "vizdiff_cli.py",
+            "vizdiff_workflow.py",
+            "vizdiff_review_root.py",
+            "vizline_workflow.py",
+            "baseline_manifest.py",
+            "capture_runner.py",
+            "image_diff.py",
+            "gallery_server.py",
+            "bugshot_workflow.py",
+            "ansi_render.py",
+        ],
+        "trees": ["static", "templates"],
+    },
+}
+
 USAGE = """\
 usage: build-plugin [--bump] [-h | --help] [-v | --verbose]
 
@@ -242,37 +280,42 @@ options:
 
 
 def write_skill_dir(verbose: bool = False) -> None:
-    """Refresh the per-plugin python/static/template copies under skills/bugshot/.
+    """Refresh the per-skill python/static/template copies under skills/<name>/.
 
-    Preserves skills/bugshot/SKILL.md, which is the canonical hand-edited source
-    of truth (not a build artifact). Only the file copies that build-plugin owns
-    are removed and re-emitted.
+    Each skill's SKILL.md is the canonical hand-edited source of truth and is
+    preserved verbatim. Only the file copies that build-plugin owns are
+    removed and re-emitted.
     """
-    skill_dir = ROOT / "skills" / "bugshot"
+    for skill_name, spec in SKILL_PLUGINS.items():
+        write_one_skill_dir(skill_name, spec, verbose=verbose)
+
+
+def write_one_skill_dir(skill_name: str, spec: dict, verbose: bool = False) -> None:
+    skill_dir = ROOT / "skills" / skill_name
     skill_dir.mkdir(parents=True, exist_ok=True)
 
     skill_md = skill_dir / "SKILL.md"
     if not skill_md.exists():
         raise SystemExit(
-            f"skills/bugshot/SKILL.md is missing. It is the canonical source — "
-            f"do not regenerate it. Restore the file from git and retry."
+            f"skills/{skill_name}/SKILL.md is missing. It is the canonical "
+            f"source — do not regenerate it. Restore the file from git and retry."
         )
 
-    for filename in SKILL_FILES:
+    for filename in spec["files"]:
         target = skill_dir / filename
         if target.exists():
             target.unlink()
         shutil.copy(ROOT / filename, target)
         if verbose:
-            print(f"  wrote skills/bugshot/{filename}")
+            print(f"  wrote skills/{skill_name}/{filename}")
 
-    for subdir in ("static", "templates"):
+    for subdir in spec["trees"]:
         target = skill_dir / subdir
         if target.exists():
             shutil.rmtree(target)
         shutil.copytree(ROOT / subdir, target)
         if verbose:
-            print(f"  wrote skills/bugshot/{subdir}/")
+            print(f"  wrote skills/{skill_name}/{subdir}/")
 
 
 def main() -> None:

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bugshot — {{filename}}</title>
+    <title>Bugshot — {{unit_label}}</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -12,8 +12,9 @@
             <div class="detail-nav-slot detail-nav-left">
                 <span id="prev-slot"></span>
             </div>
-            <div class="detail-nav-slot detail-nav-center">
+            <div class="detail-nav-slot detail-nav-center detail-nav-toolbar">
                 <a href="/" class="btn" id="index-btn">Index</a>
+                <div id="detail-theme-controls" class="theme-controls"></div>
             </div>
             <div class="detail-nav-slot detail-nav-right">
                 <span id="next-slot"></span>
@@ -21,14 +22,29 @@
         </nav>
     </header>
     <main class="detail-main">
-        <div class="detail-shortcut-legend">1-9 jump · 0 last · g go to # · c copy filename · n/. next · p/, previous · i index · q quit · / comment · Esc unfocus</div>
+        <div class="detail-shortcut-legend">1-9 jump · 0 last · g go to # · c copy filename / unit id · n/. next · p/, previous · i index · q quit · / comment · m/M mode · Esc unfocus</div>
+        <div id="mode-bar" class="mode-bar" hidden>
+            <span class="mode-bar-label">Mode:</span>
+            <div class="mode-button-group" role="radiogroup">
+                <button type="button" class="mode-button" data-mode="side-by-side">Side-by-side</button>
+                <button type="button" class="mode-button" data-mode="swipe">Swipe</button>
+                <button type="button" class="mode-button" data-mode="onion">Onion</button>
+                <button type="button" class="mode-button" data-mode="diff">Diff image</button>
+            </div>
+            <span class="mode-bar-spacer"></span>
+            <label class="mode-bar-toggle">
+                <input type="checkbox" id="overlay-toggle">
+                <span>Diff pixel overlay</span>
+            </label>
+        </div>
+        <div id="viewer-pane" class="viewer-pane" hidden></div>
         <div class="detail-content">
-            <div id="image-container">
-                <!-- Image or ANSI content injected by gallery.js -->
+            <div id="unit-assets" class="unit-assets">
+                <!-- Unit assets injected by gallery.js -->
             </div>
             <div class="detail-filename-row">
-                <span class="detail-filename" id="detail-filename">{{filename}}</span>
-                <button id="copy-filename-btn" class="btn btn-copy-filename" type="button" title="Copy filename (c)">
+                <span class="detail-filename" id="detail-filename">{{unit_label}}</span>
+                <button id="copy-filename-btn" class="btn btn-copy-filename" type="button" title="Copy unit id (c)">
                     <svg class="copy-filename-icon" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M16 4h-2.18A3 3 0 0 0 11 2H9a3 3 0 0 0-2.82 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm-7-1h2a1 1 0 0 1 .95.68l.29.82H7.76l.29-.82A1 1 0 0 1 9 3Zm7 15H4V6h12v12Zm4-10v12a2 2 0 0 1-2 2H7v-2h11V8h2Z"></path>
                     </svg>
@@ -46,18 +62,17 @@
                 <!-- Populated by gallery.js -->
             </div>
         </div>
+        <div id="unit-metadata" class="unit-metadata">
+            <!-- Unit metadata injected by gallery.js -->
+        </div>
         <div class="detail-actions">
             <button id="detail-done-btn" class="btn btn-done">Done Reviewing</button>
         </div>
     </main>
     <script>
         window.__BUGSHOT_DETAIL__ = {
-            filename: "{{filename}}",
-            encodedName: "{{encoded_name}}",
-            contentType: "{{content_type}}",
-            imageSrc: "{{image_src}}",
-            ansiHtml: "{{ansi_html}}",
-            images: {{images_json}},
+            unit: {{unit_json}},
+            units: {{units_json}},
             nav: {{nav_json}}
         };
     </script>
