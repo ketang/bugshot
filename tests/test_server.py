@@ -422,3 +422,42 @@ def test_list_comments_includes_region(server):
     assert status == 200
     assert body[0]["region"] == region
     assert body[1]["region"] is None
+
+
+def test_patch_comment_adds_region(server):
+    _post_json(f"{server.url}/api/comments", {"unit_id": "alpha.png", "body": "Original"})
+    new_region = {"type": "rect", "x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}
+    status, body = _patch_json(
+        f"{server.url}/api/comments/1",
+        {"body": "Original", "region": new_region},
+    )
+    assert status == 200
+    assert body["region"] == new_region
+
+
+def test_patch_comment_clears_region(server):
+    region = {"type": "rect", "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5}
+    _post_json(
+        f"{server.url}/api/comments",
+        {"unit_id": "alpha.png", "body": "With region", "region": region},
+    )
+    status, body = _patch_json(
+        f"{server.url}/api/comments/1",
+        {"body": "With region", "region": None},
+    )
+    assert status == 200
+    assert body["region"] is None
+
+
+def test_patch_comment_omits_region_preserves_existing(server):
+    region = {"type": "rect", "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5}
+    _post_json(
+        f"{server.url}/api/comments",
+        {"unit_id": "alpha.png", "body": "With region", "region": region},
+    )
+    status, body = _patch_json(
+        f"{server.url}/api/comments/1",
+        {"body": "Edited body, no region key"},
+    )
+    assert status == 200
+    assert body["region"] == region

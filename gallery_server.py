@@ -716,15 +716,28 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": "body is required"}, status=400)
             return
 
+        region_supplied = "region" in data
+        region_text = (
+            json.dumps(data["region"])
+            if region_supplied and data["region"] is not None
+            else None
+        )
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        conn.execute(
-            "UPDATE comments SET body = ? WHERE id = ?",
-            (body, comment_id),
-        )
+        if region_supplied:
+            conn.execute(
+                "UPDATE comments SET body = ?, region = ? WHERE id = ?",
+                (body, region_text, comment_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE comments SET body = ? WHERE id = ?",
+                (body, comment_id),
+            )
         conn.commit()
         row = conn.execute(
-            "SELECT id, unit_id, body, created_at FROM comments WHERE id = ?",
+            "SELECT id, unit_id, body, region, created_at FROM comments WHERE id = ?",
             (comment_id,),
         ).fetchone()
         conn.close()
@@ -732,7 +745,10 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         if row is None:
             self._send_json({"error": "not found"}, status=404)
             return
-        self._send_json(dict(row))
+
+        item = dict(row)
+        item["region"] = json.loads(item["region"]) if item["region"] else None
+        self._send_json(item)
 
     def _handle_comment_delete(self, comment_id):
         conn = sqlite3.connect(self.db_path)
