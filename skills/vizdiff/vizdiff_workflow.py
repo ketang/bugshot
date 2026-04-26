@@ -180,23 +180,87 @@ def run_in_process(
             ShellIO(json_output=True),
             json_output=True,
         )
-        return [_enrich_draft(draft, server.units) for draft in summary.drafts]
+        # Pair each draft with its source comment so we know the unit_id
+        # even when bugshot collapsed it into the legacy single-asset shape.
+        units_by_id = {u["id"]: u for u in server.units}
+        comments_with_known_unit = [
+            c for c in comments if c["unit_id"] in units_by_id
+        ]
+        return [
+            _enrich_draft(draft, comment["unit_id"], server.units)
+            for draft, comment in zip(summary.drafts, comments_with_known_unit)
+        ]
     finally:
         server.shutdown()
         if os.path.exists(server.db_path):
             os.unlink(server.db_path)
 
 
-def _enrich_draft(draft: dict, units: list[dict]) -> dict:
-    """Attach the unit's vizdiff metadata block to the draft, if present."""
+def _enrich_draft(draft: dict, unit_id: str, units: list[dict]) -> dict:
+    """Attach the unit's vizdiff metadata block and normalize to unit shape.
+
+    Bugshot emits the legacy {image_name, image_path} draft shape for
+    single-asset units. Vizdiff's added/removed classifications produce
+    single-asset units, but downstream consumers expect a uniform unit
+    shape across all four classifications. When a unit carries the
+    bugshot.vizdiff/v1 schema, this function rewrites the draft into the
+    unit shape (asset_names/asset_paths/...) and attaches the vizdiff block.
+    """
     units_by_id = {u["id"]: u for u in units}
-    unit_id = draft.get("unit_id") or draft.get("image_name")
     unit = units_by_id.get(unit_id)
     if unit is None:
         return draft
+
+    vizdiff_content = None
     for meta in unit["metadata"]:
         content = meta.get("content")
         if isinstance(content, dict) and content.get("schema") == vizdiff_review_root.VIZDIFF_SCHEMA:
-            draft["vizdiff"] = content
+            vizdiff_content = content
             break
+
+    if vizdiff_content is None:
+        return draft
+
+    if "unit_id" not in draft:
+        # Legacy single-asset shape — rebuild as a grouped-unit draft.
+        image_path = draft.get("image_path", "")
+        screenshot_dir = (
+            os.path.dirname(os.path.dirname(image_path))
+            if image_path
+            else ""
+        )
+        unit_path = (
+            os.path.join(screenshot_dir, unit["relative_dir"])
+            if unit["relative_dir"]
+            else screenshot_dir
+        )
+        asset_names = [a["name"] for a in unit["assets"]]
+        asset_paths = [
+            os.path.join(unit_path, a["name"]) if unit_path else a["name"]
+            for a in unit["assets"]
+        ]
+        rebuilt = {
+            "unit_id": unit["id"],
+            "unit_label": unit["label"],
+            "unit_path": unit_path,
+            "asset_names": asset_names,
+            "asset_paths": asset_paths,
+            "metadata_names": [m["name"] for m in unit["metadata"]],
+            "metadata_paths": [
+                os.path.join(unit_path, m["name"]) if unit_path else m["name"]
+                for m in unit["metadata"]
+            ],
+            "user_comment": draft.get("user_comment", ""),
+        }
+        ref_rel = unit.get("reference_asset_relative_path")
+        if ref_rel:
+            ref_name = os.path.basename(ref_rel)
+            rebuilt["reference_asset_name"] = ref_name
+            rebuilt["reference_asset_path"] = (
+                os.path.join(unit_path, ref_name) if unit_path else ref_name
+            )
+        rebuilt["vizdiff"] = vizdiff_content
+        return rebuilt
+
+    draft["vizdiff"] = vizdiff_content
     return draft
