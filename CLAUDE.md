@@ -19,7 +19,7 @@ Binds to `0.0.0.0` by default (reachable from other hosts). Pass `--local-only` 
 - `gallery_server.py` — HTTP server + `create_server()` factory. Runs standalone or in a background thread inside the workflow.
 - `ansi_render.py` — ANSI escape sequence to HTML converter.
 - `static/`, `templates/` — CSS/JS and HTML served to the browser.
-- `SKILL.md` — Claude Code skill definition (agent-facing contract).
+- `skills/bugshot/SKILL.md` — Claude Code skill definition (agent-facing contract). Hand-edited; copied alongside the python files into the plugin distribution by `scripts/build-plugin`.
 - `tests/` — pytest unit tests and `e2e_test.sh`.
 
 ## Running Tests
@@ -40,7 +40,7 @@ bash tests/e2e_test.sh
 
 ## Documentation Sync Rules
 
-`SKILL.md` is the contract consumed by an agent invoking bugshot. It must stay aligned with the code:
+`skills/bugshot/SKILL.md` is the contract consumed by an agent invoking bugshot. It must stay aligned with the code:
 
 - Changing `bugshot_cli.py` flags, stdout/stderr output format, or exit behavior → update `SKILL.md`.
 - Changing recognized extensions in `gallery_server.py` → update `SKILL.md`.
