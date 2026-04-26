@@ -242,22 +242,35 @@ options:
 
 
 def write_skill_dir(verbose: bool = False) -> None:
-    skill_dir = ROOT / "skills" / "bugshot"
-    if skill_dir.exists():
-        shutil.rmtree(skill_dir)
-    skill_dir.mkdir(parents=True)
+    """Refresh the per-plugin python/static/template copies under skills/bugshot/.
 
-    shutil.copy(ROOT / "SKILL.md", skill_dir / "SKILL.md")
-    if verbose:
-        print("  wrote skills/bugshot/SKILL.md")
+    Preserves skills/bugshot/SKILL.md, which is the canonical hand-edited source
+    of truth (not a build artifact). Only the file copies that build-plugin owns
+    are removed and re-emitted.
+    """
+    skill_dir = ROOT / "skills" / "bugshot"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+
+    skill_md = skill_dir / "SKILL.md"
+    if not skill_md.exists():
+        raise SystemExit(
+            f"skills/bugshot/SKILL.md is missing. It is the canonical source — "
+            f"do not regenerate it. Restore the file from git and retry."
+        )
 
     for filename in SKILL_FILES:
-        shutil.copy(ROOT / filename, skill_dir / filename)
+        target = skill_dir / filename
+        if target.exists():
+            target.unlink()
+        shutil.copy(ROOT / filename, target)
         if verbose:
             print(f"  wrote skills/bugshot/{filename}")
 
     for subdir in ("static", "templates"):
-        shutil.copytree(ROOT / subdir, skill_dir / subdir)
+        target = skill_dir / subdir
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(ROOT / subdir, target)
         if verbose:
             print(f"  wrote skills/bugshot/{subdir}/")
 
