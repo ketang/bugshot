@@ -15,6 +15,10 @@
     var SHORTCUT_KEY_ENTER = "Enter";
     var SHORTCUT_KEY_GO_TO = "g";
     var SHORTCUT_KEY_TOGGLE_UNCHANGED = "u";
+    var SHORTCUT_KEY_MODE_NEXT = "m";
+    var SHORTCUT_KEY_MODE_PREV = "M";
+    var VIZDIFF_MODE_KEY = "bugshot:vizdiff:mode";
+    var VIZDIFF_MODES = ["side-by-side", "swipe", "onion", "diff"];
     var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
     var VIZDIFF_FILTER_KEY = "bugshot:vizdiff:filters";
     var VIZDIFF_DEFAULT_FILTERS = {
@@ -50,6 +54,7 @@
     var vizdiffActive = false;
     var vizdiffFilters = null;
     var vizdiffUnits = null;
+    var vizdiffDetailActive = false;
 
     applyTheme(currentTheme, false);
     initServerStatusBanner();
@@ -100,6 +105,12 @@
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_TOGGLE_UNCHANGED && isIndex && vizdiffActive) {
             toggleVizdiffUnchangedFilter();
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_MODE_NEXT && isDetail && vizdiffDetailActive) {
+            cycleVizdiffMode(1);
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_MODE_PREV && isDetail && vizdiffDetailActive) {
+            cycleVizdiffMode(-1);
             event.preventDefault();
         } else if (DIGIT_KEYS.indexOf(event.key) !== -1) {
             navigateToImageByShortcut(event.key);
@@ -512,6 +523,359 @@
         renderIndexTiles();
     }
 
+    function initVizdiffDetailModes(unit) {
+        var vd = unit && unit.vizdiff;
+        if (!vd || !vd.base_asset || !vd.head_asset) {
+            return;
+        }
+        var baseAsset = assetByName(unit, vd.base_asset);
+        if (!baseAsset) {
+            return;
+        }
+        if (baseAsset.type === "ansi") {
+            // ANSI units only support side-by-side rendering of the existing
+            // asset cards; the canvas modes have no pixel grid to subtract.
+            return;
+        }
+
+        vizdiffDetailActive = true;
+        var modeBar = document.getElementById("mode-bar");
+        var pane = document.getElementById("viewer-pane");
+        if (!modeBar || !pane) {
+            return;
+        }
+        modeBar.hidden = false;
+        pane.hidden = false;
+
+        var overlayToggle = document.getElementById("overlay-toggle");
+        if (overlayToggle) {
+            overlayToggle.checked = false;
+            overlayToggle.addEventListener("change", function () {
+                renderVizdiffMode(loadVizdiffMode(), unit);
+            });
+        }
+
+        Array.prototype.forEach.call(
+            modeBar.querySelectorAll(".mode-button"),
+            function (btn) {
+                btn.addEventListener("click", function () {
+                    setVizdiffMode(btn.dataset.mode, unit);
+                });
+            }
+        );
+
+        setVizdiffMode(loadVizdiffMode(), unit);
+    }
+
+    function loadVizdiffMode() {
+        try {
+            var stored = localStorage.getItem(VIZDIFF_MODE_KEY);
+            if (stored && VIZDIFF_MODES.indexOf(stored) !== -1) {
+                return stored;
+            }
+        } catch (e) {
+            // ignored
+        }
+        return "side-by-side";
+    }
+
+    function setVizdiffMode(mode, unit) {
+        if (VIZDIFF_MODES.indexOf(mode) === -1) {
+            mode = "side-by-side";
+        }
+        try {
+            localStorage.setItem(VIZDIFF_MODE_KEY, mode);
+        } catch (e) {
+            // ignored
+        }
+        Array.prototype.forEach.call(
+            document.querySelectorAll(".mode-button"),
+            function (btn) {
+                btn.dataset.active = String(btn.dataset.mode === mode);
+            }
+        );
+        renderVizdiffMode(mode, unit);
+    }
+
+    function cycleVizdiffMode(delta) {
+        var current = loadVizdiffMode();
+        var idx = VIZDIFF_MODES.indexOf(current);
+        if (idx === -1) {
+            idx = 0;
+        }
+        var next = (idx + delta + VIZDIFF_MODES.length) % VIZDIFF_MODES.length;
+        setVizdiffMode(VIZDIFF_MODES[next], currentUnit);
+    }
+
+    function renderVizdiffMode(mode, unit) {
+        var pane = document.getElementById("viewer-pane");
+        if (!pane) {
+            return;
+        }
+        pane.replaceChildren();
+        var base = assetByName(unit, unit.vizdiff.base_asset);
+        var head = assetByName(unit, unit.vizdiff.head_asset);
+        switch (mode) {
+            case "side-by-side":
+                renderVizdiffSideBySide(pane, base, head);
+                break;
+            case "swipe":
+                renderVizdiffSwipe(pane, base, head);
+                break;
+            case "onion":
+                renderVizdiffOnion(pane, base, head);
+                break;
+            case "diff":
+                renderVizdiffDiff(pane, base, head);
+                break;
+        }
+    }
+
+    function assetByName(unit, name) {
+        if (!unit || !name) {
+            return null;
+        }
+        for (var i = 0; i < unit.assets.length; i++) {
+            if (unit.assets[i].name === name) {
+                return unit.assets[i];
+            }
+        }
+        return null;
+    }
+
+    function buildSideFigure(label, asset) {
+        var fig = document.createElement("figure");
+        fig.className = "vizdiff-figure";
+        var cap = document.createElement("figcaption");
+        cap.textContent = label;
+        fig.appendChild(cap);
+        var img = document.createElement("img");
+        img.src = asset.src;
+        img.alt = asset.name;
+        fig.appendChild(img);
+        return fig;
+    }
+
+    function renderVizdiffSideBySide(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-side-by-side";
+        wrap.appendChild(buildSideFigure("Base", base));
+        wrap.appendChild(buildSideFigure("Head", head));
+        pane.appendChild(wrap);
+        if (overlayEnabled()) {
+            applyOverlayToFigure(wrap.lastChild, base, head);
+        }
+    }
+
+    function overlayEnabled() {
+        var toggle = document.getElementById("overlay-toggle");
+        return !!(toggle && toggle.checked);
+    }
+
+    function applyOverlayToFigure(figure, base, head) {
+        loadImagePair(base, head, function (baseImg, headImg) {
+            if (baseImg.naturalWidth !== headImg.naturalWidth ||
+                baseImg.naturalHeight !== headImg.naturalHeight) {
+                return;
+            }
+            var canvas = document.createElement("canvas");
+            canvas.className = "vizdiff-overlay-canvas";
+            canvas.width = headImg.naturalWidth;
+            canvas.height = headImg.naturalHeight;
+            paintOverlay(canvas, baseImg, headImg);
+            figure.appendChild(canvas);
+        });
+    }
+
+    function paintOverlay(canvas, baseImg, headImg) {
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(headImg, 0, 0);
+        var headData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(baseImg, 0, 0);
+        var baseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var out = ctx.createImageData(canvas.width, canvas.height);
+        for (var i = 0; i < headData.data.length; i += 4) {
+            var dr = Math.abs(headData.data[i] - baseData.data[i]);
+            var dg = Math.abs(headData.data[i + 1] - baseData.data[i + 1]);
+            var db = Math.abs(headData.data[i + 2] - baseData.data[i + 2]);
+            var diff = dr + dg + db;
+            if (diff > 6) {
+                out.data[i] = 239;
+                out.data[i + 1] = 68;
+                out.data[i + 2] = 68;
+                out.data[i + 3] = 160;
+            }
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.putImageData(out, 0, 0);
+    }
+
+    function renderVizdiffSwipe(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-swipe-wrap";
+        var stage = document.createElement("div");
+        stage.className = "vizdiff-swipe-stage";
+
+        var baseImg = document.createElement("img");
+        baseImg.className = "vizdiff-swipe-base";
+        baseImg.src = base.src;
+        baseImg.alt = base.name;
+
+        var headImg = document.createElement("img");
+        headImg.className = "vizdiff-swipe-head";
+        headImg.src = head.src;
+        headImg.alt = head.name;
+
+        var handle = document.createElement("div");
+        handle.className = "vizdiff-swipe-handle";
+
+        stage.appendChild(baseImg);
+        stage.appendChild(headImg);
+        stage.appendChild(handle);
+        wrap.appendChild(stage);
+
+        var note = document.createElement("p");
+        note.className = "vizdiff-mode-note";
+        note.textContent = "Drag the handle to swipe between base (left) and head (right).";
+        wrap.appendChild(note);
+
+        pane.appendChild(wrap);
+
+        var split = 0.5;
+        function applySplit() {
+            var pct = (split * 100).toFixed(2) + "%";
+            headImg.style.clipPath = "inset(0 0 0 " + pct + ")";
+            handle.style.left = pct;
+        }
+        applySplit();
+
+        function onMove(clientX) {
+            var rect = stage.getBoundingClientRect();
+            if (rect.width <= 0) {
+                return;
+            }
+            split = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            applySplit();
+        }
+        handle.addEventListener("pointerdown", function (event) {
+            event.preventDefault();
+            handle.setPointerCapture(event.pointerId);
+            function onPointerMove(e) {
+                onMove(e.clientX);
+            }
+            function onPointerUp(e) {
+                handle.releasePointerCapture(event.pointerId);
+                handle.removeEventListener("pointermove", onPointerMove);
+                handle.removeEventListener("pointerup", onPointerUp);
+            }
+            handle.addEventListener("pointermove", onPointerMove);
+            handle.addEventListener("pointerup", onPointerUp);
+        });
+    }
+
+    function renderVizdiffOnion(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-onion-wrap";
+        var stage = document.createElement("div");
+        stage.className = "vizdiff-onion-stage";
+
+        var baseImg = document.createElement("img");
+        baseImg.className = "vizdiff-onion-base";
+        baseImg.src = base.src;
+        baseImg.alt = base.name;
+
+        var headImg = document.createElement("img");
+        headImg.className = "vizdiff-onion-head";
+        headImg.src = head.src;
+        headImg.alt = head.name;
+
+        stage.appendChild(baseImg);
+        stage.appendChild(headImg);
+
+        var controls = document.createElement("div");
+        controls.className = "vizdiff-onion-controls";
+        var label = document.createElement("label");
+        label.textContent = "Head opacity";
+        var slider = document.createElement("input");
+        slider.type = "range";
+        slider.min = "0";
+        slider.max = "100";
+        slider.value = "50";
+        slider.addEventListener("input", function () {
+            headImg.style.opacity = String(slider.value / 100);
+        });
+        headImg.style.opacity = "0.5";
+        controls.appendChild(label);
+        controls.appendChild(slider);
+
+        wrap.appendChild(stage);
+        wrap.appendChild(controls);
+        pane.appendChild(wrap);
+    }
+
+    function renderVizdiffDiff(pane, base, head) {
+        var wrap = document.createElement("div");
+        wrap.className = "vizdiff-diff-wrap";
+        var canvas = document.createElement("canvas");
+        canvas.className = "vizdiff-diff-canvas";
+        wrap.appendChild(canvas);
+
+        var note = document.createElement("p");
+        note.className = "vizdiff-mode-note";
+        note.textContent = "Pixels glow where base and head differ.";
+        wrap.appendChild(note);
+        pane.appendChild(wrap);
+
+        loadImagePair(base, head, function (baseImg, headImg) {
+            if (baseImg.naturalWidth !== headImg.naturalWidth ||
+                baseImg.naturalHeight !== headImg.naturalHeight) {
+                note.textContent =
+                    "Diff image unavailable: base and head dimensions differ.";
+                return;
+            }
+            canvas.width = baseImg.naturalWidth;
+            canvas.height = baseImg.naturalHeight;
+            paintDiffCanvas(canvas, baseImg, headImg);
+        });
+    }
+
+    function paintDiffCanvas(canvas, baseImg, headImg) {
+        var ctx = canvas.getContext("2d");
+        ctx.drawImage(baseImg, 0, 0);
+        var baseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(headImg, 0, 0);
+        var headData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        var out = ctx.createImageData(canvas.width, canvas.height);
+        for (var i = 0; i < headData.data.length; i += 4) {
+            var dr = Math.abs(headData.data[i] - baseData.data[i]);
+            var dg = Math.abs(headData.data[i + 1] - baseData.data[i + 1]);
+            var db = Math.abs(headData.data[i + 2] - baseData.data[i + 2]);
+            out.data[i] = Math.min(255, dr * 4);
+            out.data[i + 1] = Math.min(255, dg * 4);
+            out.data[i + 2] = Math.min(255, db * 4);
+            out.data[i + 3] = 255;
+        }
+        ctx.putImageData(out, 0, 0);
+    }
+
+    function loadImagePair(base, head, callback) {
+        var baseImg = new Image();
+        var headImg = new Image();
+        var loaded = 0;
+        function maybeReady() {
+            loaded += 1;
+            if (loaded === 2) {
+                callback(baseImg, headImg);
+            }
+        }
+        baseImg.onload = maybeReady;
+        headImg.onload = maybeReady;
+        baseImg.onerror = function () { /* skip */ };
+        headImg.onerror = function () { /* skip */ };
+        baseImg.src = base.src;
+        headImg.src = head.src;
+    }
+
     function appendAssetPreview(container, asset, isPreview) {
         if (asset.type === "image") {
             var imageElement = document.createElement("img");
@@ -720,6 +1084,8 @@
         currentUnit.assets.forEach(function (asset) {
             assetsContainer.appendChild(createAssetCard(asset));
         });
+
+        initVizdiffDetailModes(currentUnit);
 
         previousSlot.appendChild(
             createNavigationButton({

@@ -845,3 +845,177 @@ header h1 {
     );
     pointer-events: none;
 }
+
+/* Vizdiff detail-page Mode toolbar and viewer pane */
+.mode-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.6rem 1rem;
+    margin: 0 1rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+}
+
+.mode-bar[hidden] {
+    display: none;
+}
+
+.mode-bar-label {
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.mode-button-group {
+    display: flex;
+    gap: 0.35rem;
+}
+
+.mode-button {
+    padding: 0.3rem 0.7rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.mode-button[data-active="true"] {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent-strong);
+}
+
+.mode-bar-spacer {
+    flex: 1;
+}
+
+.mode-bar-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.viewer-pane {
+    margin: 0 1rem 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--asset-bg);
+}
+
+.viewer-pane[hidden] {
+    display: none;
+}
+
+.vizdiff-side-by-side {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.vizdiff-figure {
+    margin: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.vizdiff-figure figcaption {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.vizdiff-figure img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.vizdiff-overlay-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: auto;
+    pointer-events: none;
+    mix-blend-mode: multiply;
+}
+
+.vizdiff-mode-note {
+    margin: 0.5rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-soft);
+}
+
+.vizdiff-swipe-wrap,
+.vizdiff-onion-wrap,
+.vizdiff-diff-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.vizdiff-swipe-stage,
+.vizdiff-onion-stage {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.vizdiff-swipe-stage img,
+.vizdiff-onion-stage img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.vizdiff-swipe-head,
+.vizdiff-onion-head {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.vizdiff-swipe-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    cursor: ew-resize;
+    transform: translateX(-50%);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.vizdiff-onion-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.vizdiff-onion-controls input[type="range"] {
+    flex: 1;
+}
+
+.vizdiff-diff-canvas {
+    max-width: 100%;
+    height: auto;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
