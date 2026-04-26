@@ -19,6 +19,17 @@
     var SHORTCUT_KEY_MODE_PREV = "M";
     var VIZDIFF_MODE_KEY = "bugshot:vizdiff:mode";
     var VIZDIFF_MODES = ["side-by-side", "swipe", "onion", "diff"];
+    var SHORTCUT_KEY_CYCLE_TOOL = "t";
+    var TOOL_OFF = "off";
+    var TOOL_RECT = "rect";
+    var TOOL_PATH = "path";
+    var ACTIVE_TOOL_CLASS = "tool-active";
+    var REGION_LINE_COLOR = "rgba(64, 200, 240, 0.95)";
+    var REGION_FILL_COLOR = "rgba(64, 200, 240, 0.18)";
+    var REGION_PENDING_DASH = [6, 4];
+    var REGION_COMMITTED_DASH = [];
+    var MIN_RECT_NORMALIZED_SIZE = 0.005;
+    var MIN_PATH_POINT_COUNT = 2;
     var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
     var VIZDIFF_FILTER_KEY = "bugshot:vizdiff:filters";
     var VIZDIFF_DEFAULT_FILTERS = {
@@ -163,6 +174,9 @@
             if (confirm("Done reviewing? This will end the session.")) {
                 completeSession();
             }
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_CYCLE_TOOL && isDetail) {
+            cycleActiveTool();
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_FOCUS_COMMENT && isDetail) {
             focusCommentInput();
@@ -1073,6 +1087,274 @@
         navigateTo("/view/" + units[units.length - 1].encoded_id);
     }
 
+    function unitSupportsRegionDrawing(unit) {
+        if (!unit || !unit.assets || unit.assets.length !== 1) {
+            return false;
+        }
+        return unit.assets[0].type === "image";
+    }
+
+    function setupRegionDrawing(unit, assetsContainer) {
+        var state = {
+            activeTool: TOOL_OFF,
+            pendingRegion: null,
+            existingRegions: [],
+            overlay: null,
+            ctx: null,
+            drawState: null,
+            imageElement: null,
+        };
+
+        if (!unitSupportsRegionDrawing(unit)) {
+            return state;
+        }
+
+        var toolbar = document.getElementById("detail-tools");
+        if (!toolbar) {
+            return state;
+        }
+        toolbar.hidden = false;
+
+        var card = assetsContainer.querySelector(".asset-card");
+        var image = card ? card.querySelector("img") : null;
+        if (!card || !image) {
+            return state;
+        }
+
+        card.classList.add("has-region-overlay");
+        state.imageElement = image;
+        state.overlay = document.createElement("canvas");
+        state.overlay.className = "region-overlay";
+        card.appendChild(state.overlay);
+
+        function syncCanvasSize() {
+            var natW = image.naturalWidth || image.width;
+            var natH = image.naturalHeight || image.height;
+            if (!natW || !natH) {
+                return;
+            }
+            state.overlay.width = natW;
+            state.overlay.height = natH;
+            state.overlay.style.width = image.clientWidth + "px";
+            state.overlay.style.height = image.clientHeight + "px";
+            state.ctx = state.overlay.getContext("2d");
+            redraw(state);
+        }
+
+        if (image.complete && image.naturalWidth > 0) {
+            syncCanvasSize();
+        } else {
+            image.addEventListener("load", syncCanvasSize);
+        }
+        window.addEventListener("resize", syncCanvasSize);
+
+        state.overlay.addEventListener("mousedown", function (event) { onMouseDown(state, event); });
+        state.overlay.addEventListener("mousemove", function (event) { onMouseMove(state, event); });
+        state.overlay.addEventListener("mouseup", function (event) { onMouseUp(state, event); });
+        state.overlay.addEventListener("mouseleave", function (event) { onMouseUp(state, event); });
+
+        Array.prototype.slice.call(toolbar.querySelectorAll(".btn-tool")).forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                setActiveTool(state, btn.getAttribute("data-tool"));
+            });
+        });
+
+        var cancel = document.getElementById("cancel-pending-region");
+        if (cancel) {
+            cancel.addEventListener("click", function () {
+                state.pendingRegion = null;
+                hidePendingIndicator();
+                redraw(state);
+            });
+        }
+
+        return state;
+    }
+
+    function setActiveTool(state, tool) {
+        state.activeTool = tool;
+        Array.prototype.slice.call(document.querySelectorAll(".btn-tool")).forEach(function (btn) {
+            btn.setAttribute(
+                "aria-pressed",
+                btn.getAttribute("data-tool") === tool ? "true" : "false"
+            );
+        });
+        if (!state.overlay) {
+            return;
+        }
+        if (tool === TOOL_OFF) {
+            state.overlay.classList.remove(ACTIVE_TOOL_CLASS);
+        } else {
+            state.overlay.classList.add(ACTIVE_TOOL_CLASS);
+        }
+    }
+
+    function clampUnit(value) {
+        if (value < 0) return 0;
+        if (value > 1) return 1;
+        return value;
+    }
+
+    function pointFromEvent(state, event) {
+        var rect = state.overlay.getBoundingClientRect();
+        return [
+            clampUnit((event.clientX - rect.left) / rect.width),
+            clampUnit((event.clientY - rect.top) / rect.height),
+        ];
+    }
+
+    function onMouseDown(state, event) {
+        if (state.activeTool === TOOL_OFF) {
+            return;
+        }
+        event.preventDefault();
+        var p = pointFromEvent(state, event);
+        if (state.activeTool === TOOL_RECT) {
+            state.drawState = { type: TOOL_RECT, origin: p, current: p };
+        } else {
+            state.drawState = { type: TOOL_PATH, points: [p] };
+        }
+        renderDrawState(state);
+    }
+
+    function onMouseMove(state, event) {
+        if (!state.drawState) {
+            return;
+        }
+        var p = pointFromEvent(state, event);
+        if (state.drawState.type === TOOL_RECT) {
+            state.drawState.current = p;
+        } else {
+            state.drawState.points.push(p);
+        }
+        renderDrawState(state);
+    }
+
+    function onMouseUp(state, _event) {
+        if (!state.drawState) {
+            return;
+        }
+        commitDrawState(state);
+        state.drawState = null;
+    }
+
+    function renderDrawState(state) {
+        if (!state.drawState) {
+            redraw(state);
+            return;
+        }
+        redraw(state);
+        var preview = previewFromDrawState(state.drawState);
+        if (preview) {
+            paintRegion(state, preview, REGION_PENDING_DASH);
+        }
+    }
+
+    function previewFromDrawState(drawState) {
+        if (drawState.type === TOOL_RECT) {
+            var x = Math.min(drawState.origin[0], drawState.current[0]);
+            var y = Math.min(drawState.origin[1], drawState.current[1]);
+            var w = Math.abs(drawState.current[0] - drawState.origin[0]);
+            var h = Math.abs(drawState.current[1] - drawState.origin[1]);
+            return { type: TOOL_RECT, x: x, y: y, w: w, h: h };
+        }
+        return { type: TOOL_PATH, points: drawState.points.slice() };
+    }
+
+    function commitDrawState(state) {
+        var drawState = state.drawState;
+        if (!drawState) {
+            return;
+        }
+        if (drawState.type === TOOL_RECT) {
+            var preview = previewFromDrawState(drawState);
+            if (preview.w < MIN_RECT_NORMALIZED_SIZE || preview.h < MIN_RECT_NORMALIZED_SIZE) {
+                return;
+            }
+            state.pendingRegion = preview;
+        } else {
+            if (drawState.points.length < MIN_PATH_POINT_COUNT) {
+                return;
+            }
+            state.pendingRegion = { type: TOOL_PATH, points: drawState.points.slice() };
+        }
+        showPendingIndicator(state.pendingRegion);
+        redraw(state);
+    }
+
+    function redraw(state) {
+        if (!state.ctx || !state.overlay) {
+            return;
+        }
+        state.ctx.clearRect(0, 0, state.overlay.width, state.overlay.height);
+        state.existingRegions.forEach(function (region) {
+            paintRegion(state, region, REGION_COMMITTED_DASH);
+        });
+        if (state.pendingRegion) {
+            paintRegion(state, state.pendingRegion, REGION_PENDING_DASH);
+        }
+    }
+
+    function paintRegion(state, region, dash) {
+        var ctx = state.ctx;
+        var w = state.overlay.width;
+        var h = state.overlay.height;
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = REGION_LINE_COLOR;
+        ctx.fillStyle = REGION_FILL_COLOR;
+        ctx.setLineDash(dash);
+        if (region.type === TOOL_RECT) {
+            ctx.beginPath();
+            ctx.rect(region.x * w, region.y * h, region.w * w, region.h * h);
+            ctx.fill();
+            ctx.stroke();
+        } else if (region.type === TOOL_PATH) {
+            var points = region.points || [];
+            if (points.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(points[0][0] * w, points[0][1] * h);
+                for (var i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i][0] * w, points[i][1] * h);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+    }
+
+    function showPendingIndicator(region) {
+        var indicator = document.getElementById("pending-region-indicator");
+        var typeLabel = document.getElementById("pending-region-type");
+        if (indicator) {
+            indicator.hidden = false;
+        }
+        if (typeLabel && region) {
+            typeLabel.textContent = region.type;
+        }
+    }
+
+    function hidePendingIndicator() {
+        var indicator = document.getElementById("pending-region-indicator");
+        if (indicator) {
+            indicator.hidden = true;
+        }
+    }
+
+    function cycleActiveTool() {
+        var pressed = document.querySelector(".btn-tool[aria-pressed='true']");
+        var current = pressed ? pressed.getAttribute("data-tool") : TOOL_OFF;
+        var order = [TOOL_OFF, TOOL_RECT, TOOL_PATH];
+        var idx = order.indexOf(current);
+        var next = order[(idx + 1) % order.length];
+        var nextButton = document.querySelector(".btn-tool[data-tool='" + next + "']");
+        if (nextButton) {
+            nextButton.click();
+        }
+    }
+
     function initDetail() {
         var assetsContainer = document.getElementById("unit-assets");
         var metadataContainer = document.getElementById("unit-metadata");
@@ -1086,6 +1368,7 @@
         });
 
         initVizdiffDetailModes(currentUnit);
+        var regionState = setupRegionDrawing(currentUnit, assetsContainer);
 
         previousSlot.appendChild(
             createNavigationButton({
@@ -1145,14 +1428,25 @@
                 return;
             }
 
+            var payload = { unit_id: currentUnit.id, body: body };
+            if (regionState.pendingRegion) {
+                payload.region = regionState.pendingRegion;
+            }
+
             fetchJson("/api/comments", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ unit_id: currentUnit.id, body: body }),
+                body: JSON.stringify(payload),
             })
                 .then(function (comment) {
                     commentInput.value = "";
                     commentStatus.textContent = "";
+                    if (regionState.pendingRegion) {
+                        regionState.existingRegions.push(regionState.pendingRegion);
+                        regionState.pendingRegion = null;
+                        hidePendingIndicator();
+                        redraw(regionState);
+                    }
                     appendComment(comment);
                 })
                 .catch(function () {
@@ -1166,6 +1460,10 @@
                 .then(function (comments) {
                     commentsList.textContent = "";
                     commentStatus.textContent = "";
+                    regionState.existingRegions = comments
+                        .map(function (c) { return c.region; })
+                        .filter(function (r) { return r != null; });
+                    redraw(regionState);
                     comments.forEach(appendComment);
                 })
                 .catch(function () {
@@ -1178,6 +1476,17 @@
             var item = document.createElement("div");
             item.className = "comment-item";
             item.dataset.id = comment.id;
+
+            var badge = document.createElement("span");
+            badge.className = "region-badge";
+            if (comment.region && comment.region.type === "rect") {
+                badge.textContent = "▭ rect";
+            } else if (comment.region && comment.region.type === "path") {
+                badge.textContent = "✎ path";
+            } else {
+                badge.textContent = "⬚ image";
+            }
+            item.appendChild(badge);
 
             var bodyElement = document.createElement("span");
             bodyElement.className = "comment-body";
