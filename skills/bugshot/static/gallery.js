@@ -23,11 +23,15 @@
     var jumpModal = null;
     var jumpModalInput = null;
     var jumpModalError = null;
+    var serverStatusBanner = null;
+    var serverStatusText = null;
+    var isServerReachable = true;
+    var serverActionButtons = [];
     var copyFilenameStatusTimeout = null;
 
-    setInterval(function () {
-        fetch("/api/heartbeat", { method: "POST" }).catch(function () {});
-    }, HEARTBEAT_INTERVAL_MS);
+    initServerStatusBanner();
+    checkServerHeartbeat();
+    setInterval(checkServerHeartbeat, HEARTBEAT_INTERVAL_MS);
 
     window.addEventListener("beforeunload", function () {
         if (!isInternalNavigation) {
@@ -113,6 +117,11 @@
             navigateTo(INDEX_PATH);
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_QUIT) {
+            if (!isServerReachable) {
+                showServerDown("Bugshot server is unreachable. Reconnect before finishing review.");
+                event.preventDefault();
+                return;
+            }
             if (confirm("Done reviewing? This will end the session.")) {
                 completeSession();
             }
@@ -128,11 +137,71 @@
             return;
         }
 
+        serverActionButtons.push(button);
         button.addEventListener("click", function () {
+            if (!isServerReachable) {
+                showServerDown("Bugshot server is unreachable. Reconnect before finishing review.");
+                return;
+            }
             if (confirm("Done reviewing? This will end the session.")) {
                 completeSession();
             }
         });
+    }
+
+    function initServerStatusBanner() {
+        serverStatusBanner = document.createElement("div");
+        serverStatusBanner.className = "server-status-banner is-hidden";
+        serverStatusBanner.setAttribute("role", "status");
+
+        serverStatusText = document.createElement("span");
+        serverStatusBanner.appendChild(serverStatusText);
+        document.body.insertBefore(serverStatusBanner, document.body.firstChild);
+    }
+
+    function checkServerHeartbeat() {
+        fetch("/api/heartbeat", { method: "POST" })
+            .then(requireOkResponse)
+            .then(function () {
+                setServerReachable(true);
+            })
+            .catch(function () {
+                showServerDown("Bugshot server is unreachable. New comments cannot be saved until it responds again.");
+            });
+    }
+
+    function setServerReachable(isReachable) {
+        isServerReachable = isReachable;
+        serverActionButtons.forEach(function (button) {
+            button.disabled = !isReachable;
+        });
+
+        if (isReachable) {
+            serverStatusBanner.classList.add("is-hidden");
+            serverStatusText.textContent = "";
+        }
+    }
+
+    function showServerDown(message) {
+        setServerReachable(false);
+        serverStatusText.textContent = message;
+        serverStatusBanner.classList.remove("is-hidden");
+    }
+
+    function requireOkResponse(response) {
+        if (!response.ok) {
+            throw new Error("Request failed with status " + response.status);
+        }
+        return response;
+    }
+
+    function fetchJson(url, options) {
+        return fetch(url, options)
+            .then(requireOkResponse)
+            .then(function (response) {
+                setServerReachable(true);
+                return response.json();
+            });
     }
 
     function initJumpModal() {
@@ -167,7 +236,9 @@
 
     function completeSession() {
         fetch("/api/done", { method: "POST" })
+            .then(requireOkResponse)
             .then(function () {
+                setServerReachable(true);
                 window.close();
 
                 document.body.textContent = "";
@@ -177,6 +248,9 @@
                     "height:100vh;color:#e0e0e0;font-size:18px;";
                 message.textContent = "Session complete. You can close this tab.";
                 document.body.appendChild(message);
+            })
+            .catch(function () {
+                showServerDown("Bugshot server is unreachable. Review was not marked complete.");
             });
     }
 
@@ -281,35 +355,59 @@
 
         var commentForm = document.getElementById("comment-form");
         var commentInput = document.getElementById("comment-input");
+        var commentSubmit = commentForm.querySelector("button[type='submit']");
         var commentsList = document.getElementById("comments-list");
+        var commentStatus = document.createElement("div");
+        commentStatus.className = "comment-status";
+        commentForm.insertAdjacentElement("afterend", commentStatus);
+
+        if (commentSubmit) {
+            serverActionButtons.push(commentSubmit);
+            commentSubmit.disabled = !isServerReachable;
+        }
 
         loadComments();
 
         commentForm.addEventListener("submit", function (event) {
             event.preventDefault();
+            commentStatus.textContent = "";
+            if (!isServerReachable) {
+                showServerDown("Bugshot server is unreachable. This comment was not saved.");
+                commentStatus.textContent = "Comment was not saved because the server is unreachable.";
+                return;
+            }
+
             var body = commentInput.value.trim();
             if (!body) {
                 return;
             }
 
-            fetch("/api/comments", {
+            fetchJson("/api/comments", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ image: detail.filename, body: body }),
             })
-                .then(function (response) { return response.json(); })
                 .then(function (comment) {
                     commentInput.value = "";
+                    commentStatus.textContent = "";
                     appendComment(comment);
+                })
+                .catch(function () {
+                    showServerDown("Bugshot server is unreachable. This comment was not saved.");
+                    commentStatus.textContent = "Comment was not saved. Keep the text here and try again after reconnecting.";
                 });
         });
 
         function loadComments() {
-            fetch("/api/comments?image=" + encodeURIComponent(detail.filename))
-                .then(function (response) { return response.json(); })
+            fetchJson("/api/comments?image=" + encodeURIComponent(detail.filename))
                 .then(function (comments) {
                     commentsList.textContent = "";
+                    commentStatus.textContent = "";
                     comments.forEach(appendComment);
+                })
+                .catch(function () {
+                    showServerDown("Bugshot server is unreachable. Existing comments could not be loaded.");
+                    commentStatus.textContent = "Existing comments could not be loaded.";
                 });
         }
 
@@ -330,15 +428,19 @@
             editButton.addEventListener("click", function () {
                 var nextBody = prompt("Edit comment:", comment.body);
                 if (nextBody !== null && nextBody.trim()) {
-                    fetch("/api/comments/" + comment.id, {
+                    fetchJson("/api/comments/" + comment.id, {
                         method: "PATCH",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ body: nextBody.trim() }),
                     })
-                        .then(function (response) { return response.json(); })
                         .then(function (updated) {
+                            commentStatus.textContent = "";
                             bodyElement.textContent = updated.body;
                             comment.body = updated.body;
+                        })
+                        .catch(function () {
+                            showServerDown("Bugshot server is unreachable. Comment edit was not saved.");
+                            commentStatus.textContent = "Comment edit was not saved.";
                         });
                 }
             });
@@ -348,8 +450,15 @@
             deleteButton.addEventListener("click", function () {
                 if (confirm("Delete this comment?")) {
                     fetch("/api/comments/" + comment.id, { method: "DELETE" })
+                        .then(requireOkResponse)
                         .then(function () {
+                            setServerReachable(true);
+                            commentStatus.textContent = "";
                             item.remove();
+                        })
+                        .catch(function () {
+                            showServerDown("Bugshot server is unreachable. Comment was not deleted.");
+                            commentStatus.textContent = "Comment was not deleted.";
                         });
                 }
             });
