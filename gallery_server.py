@@ -391,6 +391,89 @@ def _absolute_path(root, relative_path):
     return path
 
 
+VIZDIFF_SCHEMA = "bugshot.vizdiff/v1"
+VIZDIFF_FIELDS = (
+    "classification",
+    "relative_path",
+    "base_asset",
+    "head_asset",
+    "base_sha256",
+    "head_sha256",
+    "base_ref",
+    "base_sha",
+    "head_sha",
+)
+
+
+def _vizdiff_block(unit):
+    """Return a flat dict of vizdiff fields if the unit carries the schema, else None."""
+    for meta in unit.get("metadata", []):
+        content = meta.get("content")
+        if isinstance(content, dict) and content.get("schema") == VIZDIFF_SCHEMA:
+            return {field: content.get(field) for field in VIZDIFF_FIELDS}
+    return None
+
+
+def _serialize_asset_payload(asset, review_root):
+    absolute_path = _absolute_path(review_root, asset["relative_path"])
+    payload = {
+        "name": asset["name"],
+        "relative_path": asset["relative_path"],
+        "type": asset["type"],
+        "src": f"/screenshots/{urllib.parse.quote(asset['relative_path'])}",
+    }
+    if asset["type"] == "ansi":
+        payload["rendered_html"] = _render_ansi(absolute_path)
+    elif asset["type"] == "svg":
+        svg_info = _read_svg_info(absolute_path)
+        payload["svg_markup"] = svg_info["markup"]
+        payload["primary_color"] = svg_info["primary_color"]
+    return payload
+
+
+def unit_index_payload(unit, review_root):
+    """Serialize a unit for the index-page client payload.
+
+    Adds a `vizdiff` block when the unit carries the bugshot.vizdiff/v1 schema.
+    """
+    asset = _serialize_asset_payload(unit["assets"][0], review_root)
+    payload = {
+        "id": unit["id"],
+        "label": unit["label"],
+        "encoded_id": urllib.parse.quote(unit["id"]),
+        "asset_count": len(unit["assets"]),
+        "metadata_count": len(unit["metadata"]),
+        "primary_asset": asset,
+    }
+    vizdiff = _vizdiff_block(unit)
+    if vizdiff is not None:
+        payload["vizdiff"] = vizdiff
+    return payload
+
+
+def unit_detail_payload(unit, review_root):
+    """Serialize a unit for the detail-page client payload."""
+    payload = {
+        "id": unit["id"],
+        "label": unit["label"],
+        "assets": [_serialize_asset_payload(a, review_root) for a in unit["assets"]],
+        "metadata": [
+            {
+                "name": item["name"],
+                "relative_path": item["relative_path"],
+                "content": item["content"],
+                "display_text": item["display_text"],
+                "parse_error": item["parse_error"],
+            }
+            for item in unit["metadata"]
+        ],
+    }
+    vizdiff = _vizdiff_block(unit)
+    if vizdiff is not None:
+        payload["vizdiff"] = vizdiff
+    return payload
+
+
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
@@ -680,51 +763,10 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         self._send_json({"ok": True})
 
     def _serialize_unit_for_index(self, unit):
-        asset = self._serialize_asset_for_client(unit["assets"][0], preview=True)
-        return {
-            "id": unit["id"],
-            "label": unit["label"],
-            "encoded_id": urllib.parse.quote(unit["id"]),
-            "asset_count": len(unit["assets"]),
-            "metadata_count": len(unit["metadata"]),
-            "primary_asset": asset,
-        }
+        return unit_index_payload(unit, self.review_root)
 
     def _serialize_unit_for_detail(self, unit):
-        return {
-            "id": unit["id"],
-            "label": unit["label"],
-            "assets": [
-                self._serialize_asset_for_client(asset, preview=False)
-                for asset in unit["assets"]
-            ],
-            "metadata": [
-                {
-                    "name": item["name"],
-                    "relative_path": item["relative_path"],
-                    "content": item["content"],
-                    "display_text": item["display_text"],
-                    "parse_error": item["parse_error"],
-                }
-                for item in unit["metadata"]
-            ],
-        }
-
-    def _serialize_asset_for_client(self, asset, preview):
-        absolute_path = _absolute_path(self.review_root, asset["relative_path"])
-        payload = {
-            "name": asset["name"],
-            "relative_path": asset["relative_path"],
-            "type": asset["type"],
-            "src": f"/screenshots/{urllib.parse.quote(asset['relative_path'])}",
-        }
-        if asset["type"] == "ansi":
-            payload["rendered_html"] = _render_ansi(absolute_path)
-        elif asset["type"] == "svg":
-            svg_info = _read_svg_info(absolute_path)
-            payload["svg_markup"] = svg_info["markup"]
-            payload["primary_color"] = svg_info["primary_color"]
-        return payload
+        return unit_detail_payload(unit, self.review_root)
 
     def _send_html(self, content):
         data = content.encode("utf-8")
