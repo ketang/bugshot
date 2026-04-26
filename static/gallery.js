@@ -175,7 +175,11 @@
                 completeSession();
             }
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_CYCLE_TOOL && isDetail) {
+        } else if (
+            event.key === SHORTCUT_KEY_CYCLE_TOOL &&
+            isDetail &&
+            unitSupportsRegionDrawing(currentUnit)
+        ) {
             cycleActiveTool();
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_FOCUS_COMMENT && isDetail) {
@@ -1428,9 +1432,10 @@
                 return;
             }
 
+            var submittedRegion = regionState.pendingRegion || null;
             var payload = { unit_id: currentUnit.id, body: body };
-            if (regionState.pendingRegion) {
-                payload.region = regionState.pendingRegion;
+            if (submittedRegion) {
+                payload.region = submittedRegion;
             }
 
             fetchJson("/api/comments", {
@@ -1441,10 +1446,12 @@
                 .then(function (comment) {
                     commentInput.value = "";
                     commentStatus.textContent = "";
-                    if (regionState.pendingRegion) {
-                        regionState.existingRegions.push(regionState.pendingRegion);
-                        regionState.pendingRegion = null;
-                        hidePendingIndicator();
+                    if (submittedRegion) {
+                        regionState.existingRegions.push(submittedRegion);
+                        if (regionState.pendingRegion === submittedRegion) {
+                            regionState.pendingRegion = null;
+                            hidePendingIndicator();
+                        }
                         redraw(regionState);
                     }
                     appendComment(comment);

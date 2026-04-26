@@ -1025,7 +1025,7 @@ header h1 {
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    border-bottom: 1px solid #2a2f3a;
+    border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
 }
 
@@ -1034,24 +1034,32 @@ header h1 {
 }
 
 .detail-tools-label {
-    color: #8a92a6;
+    color: var(--text-muted);
     font-size: 0.85rem;
     margin-right: 0.25rem;
 }
 
 .btn-tool {
     padding: 0.3rem 0.6rem;
-    background: transparent;
-    border: 1px solid #3a4050;
-    color: #c9cfdc;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
     cursor: pointer;
     border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.btn-tool:hover {
+    border-color: var(--accent);
+    color: var(--accent-strong);
 }
 
 .btn-tool[aria-pressed="true"] {
-    background: #2090c8;
-    border-color: #2090c8;
-    color: #fff;
+    background: var(--bg-muted);
+    border-color: var(--accent);
+    color: var(--accent-strong);
 }
 
 .pending-region-indicator {
@@ -1060,10 +1068,10 @@ header h1 {
     align-items: center;
     gap: 0.4rem;
     padding: 0.2rem 0.5rem;
-    background: #2a3a4a;
-    border: 1px dashed #4a90c8;
+    background: var(--bg-muted);
+    border: 1px dashed var(--accent);
     border-radius: 4px;
-    color: #c9cfdc;
+    color: var(--text);
     font-size: 0.85rem;
 }
 
@@ -1074,10 +1082,15 @@ header h1 {
 .btn-cancel-region {
     background: none;
     border: none;
-    color: #c9cfdc;
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 1.1rem;
     line-height: 1;
+    padding: 0 0.2rem;
+}
+
+.btn-cancel-region:hover {
+    color: var(--accent-strong);
 }
 
 .asset-card.has-region-overlay {
@@ -1101,8 +1114,8 @@ header h1 {
     padding: 0.1rem 0.4rem;
     margin-right: 0.4rem;
     border-radius: 3px;
-    background: #2a3a4a;
-    color: #c9cfdc;
+    background: var(--bg-muted);
+    color: var(--text-muted);
     font-size: 0.75rem;
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-mono);
 }
