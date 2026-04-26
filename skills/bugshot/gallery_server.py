@@ -58,6 +58,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
 
         if path == "/" or path == "":
             self._serve_index()
+        elif path == "/api/comments":
+            self._handle_comment_list(parsed.query)
         elif path.startswith("/view/"):
             filename = path[len("/view/"):]
             self._serve_detail(filename)
@@ -243,6 +245,28 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     # -- API handlers --
+
+    def _handle_comment_list(self, query):
+        params = urllib.parse.parse_qs(query)
+        image = params.get("image", [None])[0]
+
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            if image:
+                rows = conn.execute(
+                    "SELECT id, image, body, created_at FROM comments "
+                    "WHERE image = ? ORDER BY id",
+                    (image,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, image, body, created_at FROM comments ORDER BY id"
+                ).fetchall()
+        finally:
+            conn.close()
+
+        self._send_json([dict(row) for row in rows])
 
     def _handle_comment_create(self):
         data = self._read_json_body()
