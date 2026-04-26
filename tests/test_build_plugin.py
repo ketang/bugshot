@@ -39,8 +39,10 @@ def test_bump_version():
 
 
 def setup_source_files(tmp_path: Path) -> None:
-    """Create minimal source files that build-plugin copies into skills/bugshot/."""
-    (tmp_path / "SKILL.md").write_text("---\nname: bugshot\n---\n")
+    """Create minimal source files that build-plugin reads or preserves."""
+    skill_dir = tmp_path / "skills" / "bugshot"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text("---\nname: bugshot\n---\n")
     for name in ["bugshot_cli.py", "bugshot_workflow.py", "gallery_server.py", "ansi_render.py"]:
         (tmp_path / name).write_text(f"# {name}\n")
     (tmp_path / "static").mkdir()
@@ -71,11 +73,15 @@ def test_build_generates_manifests(tmp_path, monkeypatch):
 def test_build_generates_skill_dir(tmp_path, monkeypatch):
     mod = load_build_plugin(tmp_path, monkeypatch)
     setup_source_files(tmp_path)
+    skill_md = tmp_path / "skills" / "bugshot" / "SKILL.md"
+    skill_md.write_text("---\nname: bugshot\n---\n# canonical edit\n")
+
     monkeypatch.setattr(sys, "argv", ["build-plugin"])
     mod.main()
 
     skill_dir = tmp_path / "skills" / "bugshot"
-    assert (skill_dir / "SKILL.md").exists()
+    assert skill_md.read_text() == "---\nname: bugshot\n---\n# canonical edit\n", \
+        "build-plugin must not clobber the canonical SKILL.md"
     for name in mod.SKILL_FILES:
         assert (skill_dir / name).exists(), f"missing {name} in skills/bugshot/"
     assert (skill_dir / "static").is_dir()
