@@ -27,12 +27,20 @@ HEARTBEAT_TIMEOUT_SECONDS = 15
 
 
 def discover_images(directory):
-    """Return sorted list of recognized filenames in directory."""
+    """Return sorted list of recognized filenames in directory.
+
+    Only regular files count. A directory whose name happens to end in a
+    recognized extension (e.g. vizdiff's per-unit `pages__login.png/`) is
+    not a flat-mode image.
+    """
     names = []
     for name in os.listdir(directory):
         ext = os.path.splitext(name)[1].lower()
-        if ext in RECOGNIZED_EXTENSIONS:
-            names.append(name)
+        if ext not in RECOGNIZED_EXTENSIONS:
+            continue
+        if not os.path.isfile(os.path.join(directory, name)):
+            continue
+        names.append(name)
     names.sort()
     return names
 
