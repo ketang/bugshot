@@ -376,3 +376,49 @@ def test_comments_table_has_region_column(server):
     finally:
         conn.close()
     assert "region" in cols, "comments table must have a `region` column"
+
+
+def test_create_comment_with_rect_region(server):
+    region = {"type": "rect", "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
+    status, body = _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png",
+        "body": "Submit button color regression",
+        "region": region,
+    })
+    assert status == 200
+    assert body["region"] == region
+
+
+def test_create_comment_with_path_region(server):
+    region = {"type": "path", "points": [[0.1, 0.2], [0.15, 0.22], [0.2, 0.25]]}
+    status, body = _post_json(f"{server.url}/api/comments", {
+        "unit_id": "beta.png",
+        "body": "Headline shifted",
+        "region": region,
+    })
+    assert status == 200
+    assert body["region"] == region
+
+
+def test_create_comment_without_region_returns_null(server):
+    status, body = _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png",
+        "body": "Image-level comment",
+    })
+    assert status == 200
+    assert body["region"] is None
+
+
+def test_list_comments_includes_region(server):
+    region = {"type": "rect", "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5}
+    _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png", "body": "With region", "region": region,
+    })
+    _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png", "body": "Without region",
+    })
+
+    status, body = _get_json(f"{server.url}/api/comments")
+    assert status == 200
+    assert body[0]["region"] == region
+    assert body[1]["region"] is None
