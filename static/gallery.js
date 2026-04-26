@@ -14,7 +14,16 @@
     var SHORTCUT_KEY_COPY_FILENAME = "c";
     var SHORTCUT_KEY_ENTER = "Enter";
     var SHORTCUT_KEY_GO_TO = "g";
+    var SHORTCUT_KEY_TOGGLE_UNCHANGED = "u";
     var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    var VIZDIFF_FILTER_KEY = "bugshot:vizdiff:filters";
+    var VIZDIFF_DEFAULT_FILTERS = {
+        changed: true,
+        added: true,
+        removed: true,
+        unchanged: false
+    };
+    var VIZDIFF_CLASS_ORDER = ["changed", "added", "removed", "unchanged"];
     var THEME_STORAGE_KEY = "bugshot-theme";
     var THEME_ORDER = [
         { id: "mono-light", label: "Light", tone: "light", swapColor: "#161311" },
@@ -38,6 +47,9 @@
     var isServerReachable = true;
     var serverActionButtons = [];
     var copyFilenameStatusTimeout = null;
+    var vizdiffActive = false;
+    var vizdiffFilters = null;
+    var vizdiffUnits = null;
 
     applyTheme(currentTheme, false);
     initServerStatusBanner();
@@ -85,6 +97,9 @@
 
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_TOGGLE_UNCHANGED && isIndex && vizdiffActive) {
+            toggleVizdiffUnchangedFilter();
             event.preventDefault();
         } else if (DIGIT_KEYS.indexOf(event.key) !== -1) {
             navigateToImageByShortcut(event.key);
@@ -341,13 +356,42 @@
 
     function initIndex() {
         var units = window.__BUGSHOT_UNITS__;
-        var gallery = document.getElementById("gallery");
+        vizdiffUnits = units;
+        vizdiffActive = units.some(function (u) { return !!u.vizdiff; });
 
-        units.forEach(function (unitInfo) {
+        if (vizdiffActive) {
+            vizdiffFilters = loadVizdiffFilters(units);
+            renderVizdiffFilterBar();
+        }
+
+        renderIndexTiles();
+    }
+
+    function renderIndexTiles() {
+        var units = vizdiffUnits || window.__BUGSHOT_UNITS__;
+        var gallery = document.getElementById("gallery");
+        gallery.replaceChildren();
+
+        var visible = vizdiffActive
+            ? applyVizdiffFilters(units, vizdiffFilters)
+            : units;
+
+        visible.forEach(function (unitInfo) {
             var item = document.createElement("a");
             item.className = "gallery-item";
             item.href = "/view/" + unitInfo.encoded_id;
+            if (unitInfo.vizdiff) {
+                item.dataset.cls = unitInfo.vizdiff.classification;
+            }
             bindInternalNavigation(item);
+
+            if (unitInfo.vizdiff) {
+                var badge = document.createElement("span");
+                badge.className = "tile-badge";
+                badge.dataset.cls = unitInfo.vizdiff.classification;
+                badge.textContent = unitInfo.vizdiff.classification.toUpperCase();
+                item.appendChild(badge);
+            }
 
             appendAssetPreview(item, unitInfo.primary_asset, true);
 
@@ -363,6 +407,109 @@
 
             gallery.appendChild(item);
         });
+    }
+
+    function loadVizdiffFilters(units) {
+        var stored = null;
+        try {
+            stored = JSON.parse(localStorage.getItem(VIZDIFF_FILTER_KEY) || "null");
+        } catch (e) {
+            stored = null;
+        }
+        var filters = stored && typeof stored === "object"
+            ? Object.assign({}, VIZDIFF_DEFAULT_FILTERS, stored)
+            : Object.assign({}, VIZDIFF_DEFAULT_FILTERS);
+
+        var counts = countVizdiffByClass(units);
+        if (counts.changed === 0 && counts.added === 0 && counts.removed === 0) {
+            filters = { changed: true, added: true, removed: true, unchanged: true };
+        }
+        return filters;
+    }
+
+    function persistVizdiffFilters() {
+        try {
+            localStorage.setItem(VIZDIFF_FILTER_KEY, JSON.stringify(vizdiffFilters));
+        } catch (e) {
+            // localStorage unavailable; no-op.
+        }
+    }
+
+    function countVizdiffByClass(units) {
+        var counts = { changed: 0, added: 0, removed: 0, unchanged: 0 };
+        units.forEach(function (u) {
+            if (u.vizdiff && counts.hasOwnProperty(u.vizdiff.classification)) {
+                counts[u.vizdiff.classification] += 1;
+            }
+        });
+        return counts;
+    }
+
+    function applyVizdiffFilters(units, filters) {
+        var visible = units.filter(function (u) {
+            if (!u.vizdiff) {
+                return true;
+            }
+            return !!filters[u.vizdiff.classification];
+        });
+        visible.sort(function (a, b) {
+            var au = a.vizdiff && a.vizdiff.classification === "unchanged" ? 1 : 0;
+            var bu = b.vizdiff && b.vizdiff.classification === "unchanged" ? 1 : 0;
+            if (au !== bu) {
+                return au - bu;
+            }
+            return (a.label || "").localeCompare(b.label || "");
+        });
+        return visible;
+    }
+
+    function renderVizdiffFilterBar() {
+        var bar = document.getElementById("filter-bar");
+        if (!bar) {
+            return;
+        }
+        bar.hidden = false;
+        bar.replaceChildren();
+
+        var counts = countVizdiffByClass(vizdiffUnits);
+        VIZDIFF_CLASS_ORDER.forEach(function (cls) {
+            var chip = document.createElement("button");
+            chip.type = "button";
+            chip.className = "filter-chip";
+            chip.dataset.cls = cls;
+            chip.dataset.active = String(!!vizdiffFilters[cls]);
+
+            var label = document.createElement("span");
+            label.className = "label";
+            label.textContent = cls.toUpperCase();
+            chip.appendChild(label);
+
+            var count = document.createElement("span");
+            count.className = "count";
+            count.textContent = String(counts[cls] || 0);
+            chip.appendChild(count);
+
+            chip.addEventListener("click", function () {
+                vizdiffFilters[cls] = !vizdiffFilters[cls];
+                chip.dataset.active = String(!!vizdiffFilters[cls]);
+                persistVizdiffFilters();
+                renderIndexTiles();
+            });
+            bar.appendChild(chip);
+        });
+    }
+
+    function toggleVizdiffUnchangedFilter() {
+        if (!vizdiffFilters) {
+            return;
+        }
+        vizdiffFilters.unchanged = !vizdiffFilters.unchanged;
+        persistVizdiffFilters();
+        var chip = document.querySelector('.filter-chip[data-cls="unchanged"]');
+        if (chip) {
+            chip.dataset.active = String(!!vizdiffFilters.unchanged);
+        }
+        renderIndexTiles();
     }
 
     function appendAssetPreview(container, asset, isPreview) {
