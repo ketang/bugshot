@@ -149,11 +149,13 @@ def test_cli_json_output(repo_root, workflow_screenshot_dir):
             "image_name": "login-clipped-button.png",
             "image_path": f"{workflow_screenshot_dir}/login-clipped-button.png",
             "user_comment": "Submit button is clipped on the right edge.",
+            "region": None,
         },
         {
             "image_name": "settings-overlap.png",
             "image_path": f"{workflow_screenshot_dir}/settings-overlap.png",
             "user_comment": "The panel header overlaps the first checkbox.",
+            "region": None,
         },
     ]
 

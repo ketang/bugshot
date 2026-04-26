@@ -49,7 +49,11 @@ the legacy per-image draft shape, while grouped-unit mode emits unit context:
 ```json
 {"draft_count": 2, "drafts": [
   {"image_name": "login-page.png", "image_path": "/abs/path/login-page.png",
-   "user_comment": "Submit button is clipped"},
+   "user_comment": "Submit button is clipped",
+   "region": null},
+  {"image_name": "login-page.png", "image_path": "/abs/path/login-page.png",
+   "user_comment": "Color regression on the highlighted region",
+   "region": {"type": "rect", "x": 0.12, "y": 0.55, "w": 0.34, "h": 0.08}},
   {"unit_id": "login-flow", "unit_label": "login-flow",
    "unit_path": "/abs/path/login-flow",
    "asset_names": ["reference.png", "candidate.png"],
@@ -60,6 +64,8 @@ the legacy per-image draft shape, while grouped-unit mode emits unit context:
   ...
 ]}
 ```
+
+`region` is `null` for image-level comments; otherwise it is an object describing a user-drawn rectangle (`{type, x, y, w, h}`) or freehand path (`{type, points}`) with all coordinates normalized to `[0, 1]`. The field appears on single-image drafts only (those with `image_name`/`image_path`); grouped-unit drafts do not currently include it. If the issue tracker supports image annotations (e.g., draw-on-screenshot), the agent should render the region payload onto the image before attaching.
 
 If `draft_count` is `0`, report "No comments were submitted." and stop.
 

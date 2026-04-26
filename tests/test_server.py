@@ -61,7 +61,7 @@ def _read_comments(db_path):
     conn.row_factory = sqlite3.Row
     try:
         return [dict(r) for r in conn.execute(
-            "SELECT id, unit_id, body, created_at FROM comments ORDER BY id"
+            "SELECT id, unit_id, body, region, created_at FROM comments ORDER BY id"
         ).fetchall()]
     finally:
         conn.close()
@@ -367,3 +367,119 @@ def test_closed_signal_sets_session_state(server):
     state = _read_session(server.db_path)
     assert state["done"] == "true"
     assert state["done_reason"] == "closed"
+
+
+def test_comments_table_has_region_column(server):
+    conn = sqlite3.connect(server.db_path)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(comments)").fetchall()}
+    finally:
+        conn.close()
+    assert "region" in cols, "comments table must have a `region` column"
+
+
+def test_create_comment_with_rect_region(server):
+    region = {"type": "rect", "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
+    status, body = _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png",
+        "body": "Submit button color regression",
+        "region": region,
+    })
+    assert status == 200
+    assert body["region"] == region
+
+
+def test_create_comment_with_path_region(server):
+    region = {"type": "path", "points": [[0.1, 0.2], [0.15, 0.22], [0.2, 0.25]]}
+    status, body = _post_json(f"{server.url}/api/comments", {
+        "unit_id": "beta.png",
+        "body": "Headline shifted",
+        "region": region,
+    })
+    assert status == 200
+    assert body["region"] == region
+
+
+def test_create_comment_without_region_returns_null(server):
+    status, body = _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png",
+        "body": "Image-level comment",
+    })
+    assert status == 200
+    assert body["region"] is None
+
+
+def test_list_comments_includes_region(server):
+    region = {"type": "rect", "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5}
+    _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png", "body": "With region", "region": region,
+    })
+    _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png", "body": "Without region",
+    })
+
+    status, body = _get_json(f"{server.url}/api/comments")
+    assert status == 200
+    assert body[0]["region"] == region
+    assert body[1]["region"] is None
+
+
+def test_patch_comment_adds_region(server):
+    _post_json(f"{server.url}/api/comments", {"unit_id": "alpha.png", "body": "Original"})
+    new_region = {"type": "rect", "x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}
+    status, body = _patch_json(
+        f"{server.url}/api/comments/1",
+        {"body": "Original", "region": new_region},
+    )
+    assert status == 200
+    assert body["region"] == new_region
+
+
+def test_patch_comment_clears_region(server):
+    region = {"type": "rect", "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5}
+    _post_json(
+        f"{server.url}/api/comments",
+        {"unit_id": "alpha.png", "body": "With region", "region": region},
+    )
+    status, body = _patch_json(
+        f"{server.url}/api/comments/1",
+        {"body": "With region", "region": None},
+    )
+    assert status == 200
+    assert body["region"] is None
+
+
+def test_patch_comment_omits_region_preserves_existing(server):
+    region = {"type": "rect", "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5}
+    _post_json(
+        f"{server.url}/api/comments",
+        {"unit_id": "alpha.png", "body": "With region", "region": region},
+    )
+    status, body = _patch_json(
+        f"{server.url}/api/comments/1",
+        {"body": "Edited body, no region key"},
+    )
+    assert status == 200
+    assert body["region"] == region
+
+
+def test_detail_page_includes_tools_toolbar_markup(server):
+    resp = urllib.request.urlopen(f"{server.url}/view/alpha.png")
+    body = resp.read().decode()
+    assert 'id="detail-tools"' in body
+    assert 'data-tool="rect"' in body
+    assert 'data-tool="path"' in body
+    assert 'data-tool="off"' in body
+    assert 'id="pending-region-indicator"' in body
+    assert "d cycle tool" in body
+
+
+def test_gallery_js_wires_region_tool_shortcut(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    assert 'SHORTCUT_KEY_CYCLE_TOOL = "d"' in script
+    assert 'TOOL_OFF = "off"' in script
+    assert 'TOOL_RECT = "rect"' in script
+    assert 'TOOL_PATH = "path"' in script
+    assert 'unitSupportsRegionDrawing' in script
+    assert 'pendingRegion' in script
+    assert 'region-badge' in script

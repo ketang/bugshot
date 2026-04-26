@@ -174,11 +174,30 @@ def _fetch_comments(db_path: str) -> list[dict[str, object]]:
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            "SELECT id, unit_id, body, created_at FROM comments ORDER BY id"
+            "SELECT id, unit_id, body, region, created_at FROM comments ORDER BY id"
         ).fetchall()
     finally:
         conn.close()
-    return [dict(row) for row in rows]
+
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["region"] = json.loads(item["region"]) if item["region"] else None
+        items.append(item)
+    return items
+
+
+def _format_region(region: dict[str, object]) -> str:
+    region_type = region.get("type")
+    if region_type == "rect":
+        return (
+            f"rect (x={region['x']:.2f}, y={region['y']:.2f}, "
+            f"w={region['w']:.2f}, h={region['h']:.2f})"
+        )
+    if region_type == "path":
+        points = region.get("points", [])
+        return f"path ({len(points)} points)"
+    return str(region)
 
 
 def _process_comments(
@@ -202,6 +221,7 @@ def _process_comments(
             continue
 
         user_comment = comment["body"]
+        region = comment.get("region")
         unit_path = (
             os.path.join(screenshot_dir, unit["relative_dir"])
             if unit["relative_dir"]
@@ -239,6 +259,7 @@ def _process_comments(
                 "image_name": assets[0]["name"],
                 "image_path": assets[0]["path"],
                 "user_comment": user_comment,
+                "region": region,
             }
         else:
             draft = {
@@ -263,6 +284,8 @@ def _process_comments(
             if len(assets) == 1:
                 io.write(f"Image name: {assets[0]['name']}")
                 io.write(f"Image path: {assets[0]['path']}")
+                if region is not None:
+                    io.write(f"Region: {_format_region(region)}")
             else:
                 io.write(f"Unit id: {unit['id']}")
                 io.write(f"Unit path: {unit_path}")
