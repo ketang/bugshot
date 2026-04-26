@@ -61,7 +61,7 @@ def _read_comments(db_path):
     conn.row_factory = sqlite3.Row
     try:
         return [dict(r) for r in conn.execute(
-            "SELECT id, unit_id, body, created_at FROM comments ORDER BY id"
+            "SELECT id, unit_id, body, region, created_at FROM comments ORDER BY id"
         ).fetchall()]
     finally:
         conn.close()
@@ -367,3 +367,12 @@ def test_closed_signal_sets_session_state(server):
     state = _read_session(server.db_path)
     assert state["done"] == "true"
     assert state["done_reason"] == "closed"
+
+
+def test_comments_table_has_region_column(server):
+    conn = sqlite3.connect(server.db_path)
+    try:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(comments)").fetchall()}
+    finally:
+        conn.close()
+    assert "region" in cols, "comments table must have a `region` column"

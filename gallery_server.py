@@ -801,6 +801,7 @@ def init_db(db_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             unit_id TEXT NOT NULL,
             body TEXT NOT NULL,
+            region TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """
