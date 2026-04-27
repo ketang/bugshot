@@ -41,6 +41,14 @@
     var REGION_COMMITTED_DASH = [];
     var MIN_RECT_NORMALIZED_SIZE = 0.005;
     var MIN_PATH_POINT_COUNT = 2;
+    var SELECTION_BADGE_FILL = "rgba(64, 200, 240, 0.95)";
+    var SELECTION_BADGE_STROKE = "rgba(11, 20, 24, 0.85)";
+    var SELECTION_BADGE_TEXT_COLOR = "#0b1418";
+    var SELECTION_BADGE_FONT_PX = 14;
+    var SELECTION_BADGE_PADDING_X = 6;
+    var SELECTION_BADGE_PADDING_Y = 3;
+    var SELECTION_BADGE_RADIUS = 4;
+    var SELECTION_BADGE_OFFSET = 2;
     var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
     var VIZDIFF_FILTER_KEY = "bugshot:vizdiff:filters";
     var VIZDIFF_DEFAULT_FILTERS = {
@@ -1340,6 +1348,82 @@
             }
         }
         ctx.restore();
+
+        if (dash === REGION_COMMITTED_DASH && region.selection_id) {
+            var anchor = selectionBadgeAnchor(region, w, h);
+            if (anchor) {
+                paintSelectionBadge(state, anchor[0], anchor[1], region.selection_id);
+            }
+        }
+    }
+
+    function selectionBadgeAnchor(region, w, h) {
+        if (region.type === TOOL_RECT) {
+            return [region.x * w, region.y * h];
+        }
+        if (region.type === TOOL_PATH && region.points && region.points.length) {
+            return [region.points[0][0] * w, region.points[0][1] * h];
+        }
+        return null;
+    }
+
+    function selectionBadgeScale(state) {
+        if (!state.imageElement || !state.imageElement.clientWidth) {
+            return 1;
+        }
+        var ratio = state.overlay.width / state.imageElement.clientWidth;
+        return ratio > 1 ? ratio : 1;
+    }
+
+    function paintSelectionBadge(state, anchorX, anchorY, selectionId) {
+        var ctx = state.ctx;
+        var scale = selectionBadgeScale(state);
+        var fontPx = SELECTION_BADGE_FONT_PX * scale;
+        var paddingX = SELECTION_BADGE_PADDING_X * scale;
+        var paddingY = SELECTION_BADGE_PADDING_Y * scale;
+        var radius = SELECTION_BADGE_RADIUS * scale;
+        var offset = SELECTION_BADGE_OFFSET * scale;
+        var label = String(selectionId);
+
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.font = "600 " + fontPx + "px sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+        var textWidth = ctx.measureText(label).width;
+        var badgeWidth = textWidth + paddingX * 2;
+        var badgeHeight = fontPx + paddingY * 2;
+
+        var maxX = state.overlay.width - badgeWidth;
+        var maxY = state.overlay.height - badgeHeight;
+        var bx = anchorX + offset;
+        var by = anchorY + offset;
+        if (bx > maxX) { bx = maxX; }
+        if (by > maxY) { by = maxY; }
+        if (bx < 0) { bx = 0; }
+        if (by < 0) { by = 0; }
+
+        ctx.fillStyle = SELECTION_BADGE_FILL;
+        ctx.strokeStyle = SELECTION_BADGE_STROKE;
+        ctx.lineWidth = Math.max(1, scale);
+        traceRoundedRect(ctx, bx, by, badgeWidth, badgeHeight, radius);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = SELECTION_BADGE_TEXT_COLOR;
+        ctx.fillText(label, bx + paddingX, by + badgeHeight / 2);
+        ctx.restore();
+    }
+
+    function traceRoundedRect(ctx, x, y, w, h, r) {
+        var radius = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + w, y, x + w, y + h, radius);
+        ctx.arcTo(x + w, y + h, x, y + h, radius);
+        ctx.arcTo(x, y + h, x, y, radius);
+        ctx.arcTo(x, y, x + w, y, radius);
+        ctx.closePath();
     }
 
     function showPendingIndicator(region) {
@@ -1418,6 +1502,7 @@
         var commentInput = document.getElementById("comment-input");
         var commentSubmit = commentForm.querySelector("button[type='submit']");
         var commentsList = document.getElementById("comments-list");
+        var selectionIdCounter = 0;
         var commentStatus = document.createElement("div");
         commentStatus.className = "comment-status";
         commentForm.insertAdjacentElement("afterend", commentStatus);
@@ -1458,7 +1543,11 @@
                 .then(function (comment) {
                     commentInput.value = "";
                     commentStatus.textContent = "";
+                    appendComment(comment);
                     if (submittedRegion) {
+                        if (comment.region && comment.region.selection_id) {
+                            submittedRegion.selection_id = comment.region.selection_id;
+                        }
                         regionState.existingRegions.push(submittedRegion);
                         if (regionState.pendingRegion === submittedRegion) {
                             regionState.pendingRegion = null;
@@ -1466,7 +1555,6 @@
                         }
                         redraw(regionState);
                     }
-                    appendComment(comment);
                 })
                 .catch(function () {
                     showServerDown("Bugshot server is unreachable. This comment was not saved.");
@@ -1479,11 +1567,12 @@
                 .then(function (comments) {
                     commentsList.textContent = "";
                     commentStatus.textContent = "";
+                    selectionIdCounter = 0;
+                    comments.forEach(appendComment);
                     regionState.existingRegions = comments
                         .map(function (c) { return c.region; })
                         .filter(function (r) { return r != null; });
                     redraw(regionState);
-                    comments.forEach(appendComment);
                 })
                 .catch(function () {
                     showServerDown("Bugshot server is unreachable. Existing comments could not be loaded.");
@@ -1498,10 +1587,12 @@
 
             var badge = document.createElement("span");
             badge.className = "region-badge";
-            if (comment.region && comment.region.type === "rect") {
-                badge.textContent = "▭ rect";
-            } else if (comment.region && comment.region.type === "path") {
-                badge.textContent = "✎ path";
+            if (comment.region) {
+                if (!comment.region.selection_id) {
+                    selectionIdCounter += 1;
+                    comment.region.selection_id = selectionIdCounter;
+                }
+                badge.textContent = "Selection " + comment.region.selection_id;
             } else {
                 badge.textContent = "⬚ image";
             }
