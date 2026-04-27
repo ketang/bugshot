@@ -121,6 +121,23 @@ def test_markdown_omits_region_line_when_null(tmp_path):
     assert "Selection" not in output
 
 
+def test_ellipse_region_round_trips_through_drafts(tmp_path):
+    db = tmp_path / "session.db"
+    _seed_db(str(db))
+    region = {"type": "ellipse", "cx": 0.4, "cy": 0.55, "rx": 0.12, "ry": 0.08}
+    _insert(str(db), "alpha.png", "Loading spinner offset", region)
+
+    units = [_make_single_asset_unit("alpha.png")]
+    shell, _out, _err = _make_shell(json_output=True)
+    comments = bugshot_workflow._fetch_comments(str(db))
+    summary = bugshot_workflow._process_comments(
+        comments, units, str(tmp_path), shell, json_output=True,
+    )
+
+    assert summary.draft_count == 1
+    assert summary.drafts[0]["region"] == region
+
+
 def test_path_region_markdown_uses_selection_number(tmp_path):
     db = tmp_path / "session.db"
     _seed_db(str(db))

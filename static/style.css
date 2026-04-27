@@ -1159,11 +1159,13 @@ header h1 {
    class so clicks pass through to the asset. Future tools (e.g. ellipse) add
    another tool-mode-* class with its own cursor. */
 .region-overlay.tool-mode-rect,
+.region-overlay.tool-mode-ellipse,
 .region-overlay.tool-mode-path {
     pointer-events: auto;
 }
 
-.region-overlay.tool-mode-rect {
+.region-overlay.tool-mode-rect,
+.region-overlay.tool-mode-ellipse {
     cursor: crosshair;
 }
 
