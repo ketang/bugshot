@@ -22,24 +22,31 @@
     var SHORTCUT_KEY_CYCLE_TOOL = "d";
     var TOOL_OFF = "off";
     var TOOL_RECT = "rect";
+    var TOOL_ELLIPSE = "ellipse";
     var TOOL_PATH = "path";
-    // Tool order drives the cycle-tool shortcut. Insert future tools (e.g. ellipse)
-    // here and the segmented control + cycle behavior will pick them up automatically.
-    var TOOL_ORDER = [TOOL_OFF, TOOL_RECT, TOOL_PATH];
+    // Tool order drives the cycle-tool shortcut. Insert future tools here and
+    // the segmented control + cycle behavior will pick them up automatically.
+    var TOOL_ORDER = [TOOL_OFF, TOOL_RECT, TOOL_ELLIPSE, TOOL_PATH];
     // Per-tool CSS class applied to the region overlay. Drives the cursor shown
-    // over the asset (off → default, rect → crosshair, freehand → pen). The "off"
-    // tool intentionally has no class so pointer-events stay none and clicks pass
-    // through to the underlying asset.
+    // over the asset (off → default, rect/ellipse → crosshair, freehand → pen).
+    // The "off" tool intentionally has no class so pointer-events stay none
+    // and clicks pass through to the underlying asset.
     var TOOL_OVERLAY_CLASS = {
         rect: "tool-mode-rect",
+        ellipse: "tool-mode-ellipse",
         path: "tool-mode-path"
     };
-    var ALL_TOOL_OVERLAY_CLASSES = ["tool-mode-rect", "tool-mode-path"];
+    var ALL_TOOL_OVERLAY_CLASSES = [
+        "tool-mode-rect",
+        "tool-mode-ellipse",
+        "tool-mode-path"
+    ];
     var REGION_LINE_COLOR = "rgba(64, 200, 240, 0.95)";
     var REGION_FILL_COLOR = "rgba(64, 200, 240, 0.18)";
     var REGION_PENDING_DASH = [6, 4];
     var REGION_COMMITTED_DASH = [];
     var MIN_RECT_NORMALIZED_SIZE = 0.005;
+    var MIN_ELLIPSE_NORMALIZED_RADIUS = 0.0025;
     var MIN_PATH_POINT_COUNT = 2;
     var SELECTION_BADGE_FILL = "rgba(64, 200, 240, 0.95)";
     var SELECTION_BADGE_STROKE = "rgba(11, 20, 24, 0.85)";
@@ -1236,6 +1243,8 @@
         var p = pointFromEvent(state, event);
         if (state.activeTool === TOOL_RECT) {
             state.drawState = { type: TOOL_RECT, origin: p, current: p };
+        } else if (state.activeTool === TOOL_ELLIPSE) {
+            state.drawState = { type: TOOL_ELLIPSE, origin: p, current: p };
         } else {
             state.drawState = { type: TOOL_PATH, points: [p] };
         }
@@ -1247,7 +1256,7 @@
             return;
         }
         var p = pointFromEvent(state, event);
-        if (state.drawState.type === TOOL_RECT) {
+        if (state.drawState.type === TOOL_RECT || state.drawState.type === TOOL_ELLIPSE) {
             state.drawState.current = p;
         } else {
             state.drawState.points.push(p);
@@ -1283,6 +1292,13 @@
             var h = Math.abs(drawState.current[1] - drawState.origin[1]);
             return { type: TOOL_RECT, x: x, y: y, w: w, h: h };
         }
+        if (drawState.type === TOOL_ELLIPSE) {
+            var cx = (drawState.origin[0] + drawState.current[0]) / 2;
+            var cy = (drawState.origin[1] + drawState.current[1]) / 2;
+            var rx = Math.abs(drawState.current[0] - drawState.origin[0]) / 2;
+            var ry = Math.abs(drawState.current[1] - drawState.origin[1]) / 2;
+            return { type: TOOL_ELLIPSE, cx: cx, cy: cy, rx: rx, ry: ry };
+        }
         return { type: TOOL_PATH, points: drawState.points.slice() };
     }
 
@@ -1297,6 +1313,15 @@
                 return;
             }
             state.pendingRegion = preview;
+        } else if (drawState.type === TOOL_ELLIPSE) {
+            var ellipsePreview = previewFromDrawState(drawState);
+            if (
+                ellipsePreview.rx < MIN_ELLIPSE_NORMALIZED_RADIUS ||
+                ellipsePreview.ry < MIN_ELLIPSE_NORMALIZED_RADIUS
+            ) {
+                return;
+            }
+            state.pendingRegion = ellipsePreview;
         } else {
             if (drawState.points.length < MIN_PATH_POINT_COUNT) {
                 return;
@@ -1334,6 +1359,19 @@
             ctx.rect(region.x * w, region.y * h, region.w * w, region.h * h);
             ctx.fill();
             ctx.stroke();
+        } else if (region.type === TOOL_ELLIPSE) {
+            ctx.beginPath();
+            ctx.ellipse(
+                region.cx * w,
+                region.cy * h,
+                region.rx * w,
+                region.ry * h,
+                0,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.stroke();
         } else if (region.type === TOOL_PATH) {
             var points = region.points || [];
             if (points.length > 0) {
@@ -1360,6 +1398,11 @@
     function selectionBadgeAnchor(region, w, h) {
         if (region.type === TOOL_RECT) {
             return [region.x * w, region.y * h];
+        }
+        if (region.type === TOOL_ELLIPSE) {
+            // Anchor at the top-left of the ellipse's bounding box so the badge
+            // sits in the same place as it would for an enclosing rect.
+            return [(region.cx - region.rx) * w, (region.cy - region.ry) * h];
         }
         if (region.type === TOOL_PATH && region.points && region.points.length) {
             return [region.points[0][0] * w, region.points[0][1] * h];

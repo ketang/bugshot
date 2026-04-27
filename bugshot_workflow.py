@@ -194,6 +194,11 @@ def _format_region(region: dict[str, object]) -> str:
             f"rect (x={region['x']:.2f}, y={region['y']:.2f}, "
             f"w={region['w']:.2f}, h={region['h']:.2f})"
         )
+    if region_type == "ellipse":
+        return (
+            f"ellipse (cx={region['cx']:.2f}, cy={region['cy']:.2f}, "
+            f"rx={region['rx']:.2f}, ry={region['ry']:.2f})"
+        )
     if region_type == "path":
         points = region.get("points", [])
         return f"path ({len(points)} points)"

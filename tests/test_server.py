@@ -400,6 +400,22 @@ def test_create_comment_with_rect_region(server):
     assert body["region"] == region
 
 
+def test_create_comment_with_ellipse_region(server):
+    region = {"type": "ellipse", "cx": 0.4, "cy": 0.55, "rx": 0.12, "ry": 0.08}
+    status, body = _post_json(f"{server.url}/api/comments", {
+        "unit_id": "alpha.png",
+        "body": "Loading spinner offset",
+        "region": region,
+    })
+    assert status == 200
+    assert body["region"] == region
+
+    # Round-trip through GET to confirm SQLite encode/decode preserves shape.
+    _, listed = _get_json(f"{server.url}/api/comments")
+    matching = [c for c in listed if c["body"] == "Loading spinner offset"]
+    assert matching and matching[0]["region"] == region
+
+
 def test_create_comment_with_path_region(server):
     region = {"type": "path", "points": [[0.1, 0.2], [0.15, 0.22], [0.2, 0.25]]}
     status, body = _post_json(f"{server.url}/api/comments", {
@@ -479,6 +495,7 @@ def test_detail_page_includes_tools_toolbar_markup(server):
     body = resp.read().decode()
     assert 'id="detail-tools"' in body
     assert 'data-tool="rect"' in body
+    assert 'data-tool="ellipse"' in body
     assert 'data-tool="path"' in body
     assert 'data-tool="off"' in body
     assert 'id="pending-region-indicator"' in body
@@ -490,6 +507,7 @@ def test_gallery_js_wires_region_tool_shortcut(repo_root):
     assert 'SHORTCUT_KEY_CYCLE_TOOL = "d"' in script
     assert 'TOOL_OFF = "off"' in script
     assert 'TOOL_RECT = "rect"' in script
+    assert 'TOOL_ELLIPSE = "ellipse"' in script
     assert 'TOOL_PATH = "path"' in script
     assert 'unitSupportsRegionDrawing' in script
     assert 'pendingRegion' in script

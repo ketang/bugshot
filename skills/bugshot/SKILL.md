@@ -65,7 +65,7 @@ the legacy per-image draft shape, while grouped-unit mode emits unit context:
 ]}
 ```
 
-`region` is `null` for image-level comments; otherwise it is an object describing a user-drawn rectangle (`{type, x, y, w, h}`) or freehand path (`{type, points}`) with all coordinates normalized to `[0, 1]`. The field appears on single-image drafts only (those with `image_name`/`image_path`); grouped-unit drafts do not currently include it. If the issue tracker supports image annotations (e.g., draw-on-screenshot), the agent should render the region payload onto the image before attaching.
+`region` is `null` for image-level comments; otherwise it is an object describing a user-drawn rectangle (`{type: "rect", x, y, w, h}`), ellipse (`{type: "ellipse", cx, cy, rx, ry}`), or freehand path (`{type: "path", points}`) with all coordinates normalized to `[0, 1]`. The field appears on single-image drafts only (those with `image_name`/`image_path`); grouped-unit drafts do not currently include it. If the issue tracker supports image annotations (e.g., draw-on-screenshot), the agent should render the region payload onto the image before attaching.
 
 If `draft_count` is `0`, report "No comments were submitted." and stop.
 
