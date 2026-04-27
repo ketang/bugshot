@@ -1186,3 +1186,17 @@ header h1 {
     font-size: 0.75rem;
     font-family: var(--font-mono);
 }
+
+/* Bidirectional hover-highlight (bugshot-qh9). When the asset card discovers
+   the cursor is over a selectable region in OFF tool mode, it adds
+   .region-hover-active to surface a pointer cursor. The matching comment row
+   gets .is-hovered to mirror the highlight in the comment list. The reverse
+   direction (hovering a comment row) sets .is-hovered directly via JS and
+   triggers a canvas redraw. */
+.asset-card.has-region-overlay.region-hover-active img {
+    cursor: pointer;
+}
+
+.comment-item.is-hovered {
+    background: var(--bg-muted);
+}

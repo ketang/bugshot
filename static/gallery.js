@@ -43,6 +43,16 @@
     ];
     var REGION_LINE_COLOR = "rgba(64, 200, 240, 0.95)";
     var REGION_FILL_COLOR = "rgba(64, 200, 240, 0.18)";
+    // Subdued styling for committed regions when nothing is being highlighted.
+    // Hover-highlight (bugshot-qh9) restores REGION_LINE_COLOR / REGION_FILL_COLOR
+    // for the matched region only.
+    var REGION_LINE_COLOR_DIM = "rgba(64, 200, 240, 0.42)";
+    var REGION_FILL_COLOR_DIM = "rgba(64, 200, 240, 0.07)";
+    var REGION_DEFAULT_LINE_WIDTH = 2;
+    var REGION_HIGHLIGHT_LINE_WIDTH = 3;
+    // Hit-test tolerance (in screen pixels) for path-style regions. Converted to
+    // normalized units against the larger image dimension at hit-test time.
+    var PATH_HIT_PAD_PIXELS = 8;
     var REGION_PENDING_DASH = [6, 4];
     var REGION_COMMITTED_DASH = [];
     var MIN_RECT_NORMALIZED_SIZE = 0.005;
@@ -1125,6 +1135,98 @@
         return assetType === "image" || assetType === "svg";
     }
 
+    // Pure hit-test helpers operate on normalized [0, 1] coordinates so they
+    // are independent of overlay/image dimensions. The path tolerance is also
+    // in normalized units; callers translate from screen pixels.
+    function hitTestRect(px, py, region) {
+        return px >= region.x && px <= region.x + region.w &&
+               py >= region.y && py <= region.y + region.h;
+    }
+
+    function hitTestEllipse(px, py, region) {
+        if (!region.rx || !region.ry) {
+            return false;
+        }
+        var dx = (px - region.cx) / region.rx;
+        var dy = (py - region.cy) / region.ry;
+        return dx * dx + dy * dy <= 1;
+    }
+
+    function distancePointToSegment(px, py, x1, y1, x2, y2) {
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        var lenSq = dx * dx + dy * dy;
+        var t = 0;
+        if (lenSq > 0) {
+            t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+            if (t < 0) { t = 0; } else if (t > 1) { t = 1; }
+        }
+        var ex = px - (x1 + t * dx);
+        var ey = py - (y1 + t * dy);
+        return Math.sqrt(ex * ex + ey * ey);
+    }
+
+    function hitTestPath(px, py, region, tolerance) {
+        var pts = region.points || [];
+        if (pts.length < 2) {
+            return false;
+        }
+        for (var i = 0; i < pts.length - 1; i++) {
+            if (distancePointToSegment(
+                    px, py,
+                    pts[i][0], pts[i][1],
+                    pts[i + 1][0], pts[i + 1][1]
+                ) <= tolerance) {
+                return true;
+            }
+        }
+        // The path is rendered with closePath() in paintRegion, so include the
+        // implicit closing segment in hit-testing for visual parity.
+        var first = pts[0];
+        var last = pts[pts.length - 1];
+        return distancePointToSegment(
+            px, py,
+            last[0], last[1],
+            first[0], first[1]
+        ) <= tolerance;
+    }
+
+    function hitTestRegions(px, py, regions, pathTolerance) {
+        // Topmost (last drawn) wins on overlap.
+        for (var i = regions.length - 1; i >= 0; i--) {
+            var r = regions[i];
+            if (r.type === TOOL_RECT && hitTestRect(px, py, r)) { return r; }
+            if (r.type === TOOL_ELLIPSE && hitTestEllipse(px, py, r)) { return r; }
+            if (r.type === TOOL_PATH && hitTestPath(px, py, r, pathTolerance)) { return r; }
+        }
+        return null;
+    }
+
+    function setHighlightedSelection(state, selectionId) {
+        if (state.highlightedSelectionId === selectionId) {
+            return;
+        }
+        state.highlightedSelectionId = selectionId;
+        syncHighlightedComment(selectionId);
+        renderDrawState(state);
+    }
+
+    function syncHighlightedComment(selectionId) {
+        var hovered = document.querySelectorAll(".comment-item.is-hovered");
+        for (var i = 0; i < hovered.length; i++) {
+            hovered[i].classList.remove("is-hovered");
+        }
+        if (selectionId == null) {
+            return;
+        }
+        var match = document.querySelector(
+            '.comment-item[data-selection-id="' + selectionId + '"]'
+        );
+        if (match) {
+            match.classList.add("is-hovered");
+        }
+    }
+
     function setupRegionDrawing(unit, assetsContainer) {
         var state = {
             activeTool: TOOL_OFF,
@@ -1134,6 +1236,8 @@
             ctx: null,
             drawState: null,
             imageElement: null,
+            highlightedSelectionId: null,
+            assetCard: null,
         };
 
         if (!unitSupportsRegionDrawing(unit)) {
@@ -1154,6 +1258,7 @@
 
         card.classList.add("has-region-overlay");
         state.imageElement = image;
+        state.assetCard = card;
         state.overlay = document.createElement("canvas");
         state.overlay.className = "region-overlay";
         card.appendChild(state.overlay);
@@ -1183,6 +1288,13 @@
         state.overlay.addEventListener("mousemove", function (event) { onMouseMove(state, event); });
         state.overlay.addEventListener("mouseup", function (event) { onMouseUp(state, event); });
         state.overlay.addEventListener("mouseleave", function (event) { onMouseUp(state, event); });
+
+        // Card-level hover drives the bidirectional hover-highlight (qh9). The
+        // overlay has pointer-events:none in the OFF tool, so events arrive
+        // on the card. In drawing modes the overlay captures events first;
+        // we early-out below so drawing isn't disturbed.
+        card.addEventListener("mousemove", function (event) { onCardHover(state, event); });
+        card.addEventListener("mouseleave", function () { onCardLeave(state); });
 
         Array.prototype.slice.call(toolbar.querySelectorAll(".btn-tool")).forEach(function (btn) {
             btn.addEventListener("click", function () {
@@ -1233,6 +1345,56 @@
             clampUnit((event.clientX - rect.left) / rect.width),
             clampUnit((event.clientY - rect.top) / rect.height),
         ];
+    }
+
+    function pointFromImageEvent(state, event) {
+        if (!state.imageElement) {
+            return null;
+        }
+        var rect = state.imageElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+            return null;
+        }
+        var x = (event.clientX - rect.left) / rect.width;
+        var y = (event.clientY - rect.top) / rect.height;
+        if (x < 0 || x > 1 || y < 0 || y > 1) {
+            return null;
+        }
+        return [x, y];
+    }
+
+    function onCardHover(state, event) {
+        if (state.activeTool !== TOOL_OFF) {
+            // Drawing modes own the cursor and the overlay events; don't
+            // interfere with an in-progress draw.
+            return;
+        }
+        var p = pointFromImageEvent(state, event);
+        if (!p) {
+            onCardLeave(state);
+            return;
+        }
+        var rect = state.imageElement.getBoundingClientRect();
+        var pathTol = PATH_HIT_PAD_PIXELS / Math.max(rect.width, rect.height, 1);
+        var hit = hitTestRegions(p[0], p[1], state.existingRegions, pathTol);
+        if (hit) {
+            if (state.assetCard) {
+                state.assetCard.classList.add("region-hover-active");
+            }
+            setHighlightedSelection(state, hit.selection_id || null);
+        } else {
+            if (state.assetCard) {
+                state.assetCard.classList.remove("region-hover-active");
+            }
+            setHighlightedSelection(state, null);
+        }
+    }
+
+    function onCardLeave(state) {
+        if (state.assetCard) {
+            state.assetCard.classList.remove("region-hover-active");
+        }
+        setHighlightedSelection(state, null);
     }
 
     function onMouseDown(state, event) {
@@ -1337,22 +1499,29 @@
             return;
         }
         state.ctx.clearRect(0, 0, state.overlay.width, state.overlay.height);
+        var highlightId = state.highlightedSelectionId;
         state.existingRegions.forEach(function (region) {
-            paintRegion(state, region, REGION_COMMITTED_DASH);
+            var isHighlighted = highlightId != null &&
+                region.selection_id === highlightId;
+            paintRegion(state, region, REGION_COMMITTED_DASH, isHighlighted);
         });
         if (state.pendingRegion) {
-            paintRegion(state, state.pendingRegion, REGION_PENDING_DASH);
+            paintRegion(state, state.pendingRegion, REGION_PENDING_DASH, true);
         }
     }
 
-    function paintRegion(state, region, dash) {
+    function paintRegion(state, region, dash, isEmphasized) {
         var ctx = state.ctx;
         var w = state.overlay.width;
         var h = state.overlay.height;
+        var isCommitted = dash === REGION_COMMITTED_DASH;
+        var dimmed = isCommitted && !isEmphasized;
         ctx.save();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = REGION_LINE_COLOR;
-        ctx.fillStyle = REGION_FILL_COLOR;
+        ctx.lineWidth = isEmphasized && isCommitted
+            ? REGION_HIGHLIGHT_LINE_WIDTH
+            : REGION_DEFAULT_LINE_WIDTH;
+        ctx.strokeStyle = dimmed ? REGION_LINE_COLOR_DIM : REGION_LINE_COLOR;
+        ctx.fillStyle = dimmed ? REGION_FILL_COLOR_DIM : REGION_FILL_COLOR;
         ctx.setLineDash(dash);
         if (region.type === TOOL_RECT) {
             ctx.beginPath();
@@ -1635,7 +1804,18 @@
                     selectionIdCounter += 1;
                     comment.region.selection_id = selectionIdCounter;
                 }
-                badge.textContent = "Selection " + comment.region.selection_id;
+                var selectionId = comment.region.selection_id;
+                badge.textContent = "Selection " + selectionId;
+                item.dataset.selectionId = selectionId;
+                // Bidirectional hover-highlight (qh9): hovering the comment
+                // emphasizes the matching region on the canvas. The reverse
+                // direction (canvas → comment) is wired in onCardHover.
+                item.addEventListener("mouseenter", function () {
+                    setHighlightedSelection(regionState, selectionId);
+                });
+                item.addEventListener("mouseleave", function () {
+                    setHighlightedSelection(regionState, null);
+                });
             } else {
                 badge.textContent = "⬚ image";
             }

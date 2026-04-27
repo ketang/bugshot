@@ -512,3 +512,28 @@ def test_gallery_js_wires_region_tool_shortcut(repo_root):
     assert 'unitSupportsRegionDrawing' in script
     assert 'pendingRegion' in script
     assert 'region-badge' in script
+
+
+def test_gallery_js_wires_region_hover_highlight(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    # Pure hit-test helpers for each region type plus the dispatch wrapper.
+    assert "function hitTestRect(" in script
+    assert "function hitTestEllipse(" in script
+    assert "function hitTestPath(" in script
+    assert "function hitTestRegions(" in script
+    # Bidirectional highlight state and the comment-list ↔ canvas wiring.
+    assert "highlightedSelectionId" in script
+    assert "setHighlightedSelection" in script
+    assert "syncHighlightedComment" in script
+    assert "data-selection-id" in script or "dataset.selectionId" in script
+    # Card-level hover (works in OFF tool mode, when the overlay is transparent
+    # to events) drives the canvas → comment direction.
+    assert "onCardHover" in script
+    assert "region-hover-active" in script
+
+
+def test_detail_styles_subdue_committed_regions(repo_root):
+    style = open(f"{repo_root}/static/style.css").read()
+    assert ".comment-item.is-hovered" in style
+    assert ".asset-card.has-region-overlay.region-hover-active" in style
+    assert "cursor: pointer" in style
