@@ -187,17 +187,17 @@ def _fetch_comments(db_path: str) -> list[dict[str, object]]:
     return items
 
 
-def _format_region(region: dict[str, object]) -> str:
-    region_type = region.get("type")
-    if region_type == "rect":
-        return (
-            f"rect (x={region['x']:.2f}, y={region['y']:.2f}, "
-            f"w={region['w']:.2f}, h={region['h']:.2f})"
-        )
-    if region_type == "path":
-        points = region.get("points", [])
-        return f"path ({len(points)} points)"
-    return str(region)
+def _format_region(region: dict[str, object]) -> str | None:
+    """Return a one-line markdown reference for a region, or None to omit.
+
+    The full region payload is preserved in the JSON output; the markdown
+    line exists only as a human-readable orientation hint pointing at the
+    on-canvas selection number (assigned by the gallery server).
+    """
+    selection_id = region.get("selection_id")
+    if isinstance(selection_id, int) and selection_id >= 1:
+        return f"Selection {selection_id}"
+    return None
 
 
 def _process_comments(
@@ -285,7 +285,9 @@ def _process_comments(
                 io.write(f"Image name: {assets[0]['name']}")
                 io.write(f"Image path: {assets[0]['path']}")
                 if region is not None:
-                    io.write(f"Region: {_format_region(region)}")
+                    region_line = _format_region(region)
+                    if region_line is not None:
+                        io.write(region_line)
             else:
                 io.write(f"Unit id: {unit['id']}")
                 io.write(f"Unit path: {unit_path}")

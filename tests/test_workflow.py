@@ -77,10 +77,17 @@ def test_drafts_include_region_on_single_asset_unit(tmp_path):
     assert summary.drafts[1]["region"] is None
 
 
-def test_markdown_includes_region_when_present(tmp_path):
+def test_markdown_includes_selection_number_when_present(tmp_path):
     db = tmp_path / "session.db"
     _seed_db(str(db))
-    region = {"type": "rect", "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
+    region = {
+        "type": "rect",
+        "x": 0.1,
+        "y": 0.2,
+        "w": 0.3,
+        "h": 0.4,
+        "selection_id": 2,
+    }
     _insert(str(db), "alpha.png", "Issue", region)
 
     units = [_make_single_asset_unit("alpha.png")]
@@ -91,8 +98,10 @@ def test_markdown_includes_region_when_present(tmp_path):
     )
 
     output = out.getvalue()
-    assert "Region: rect" in output
-    assert "x=0.10" in output
+    assert "Selection 2" in output
+    # The verbose rect descriptor must not leak into markdown.
+    assert "Region: rect" not in output
+    assert "x=0.10" not in output
 
 
 def test_markdown_omits_region_line_when_null(tmp_path):
@@ -109,12 +118,17 @@ def test_markdown_omits_region_line_when_null(tmp_path):
 
     output = out.getvalue()
     assert "Region:" not in output
+    assert "Selection" not in output
 
 
-def test_path_region_markdown_summarizes_point_count(tmp_path):
+def test_path_region_markdown_uses_selection_number(tmp_path):
     db = tmp_path / "session.db"
     _seed_db(str(db))
-    region = {"type": "path", "points": [[0.1, 0.2], [0.15, 0.22], [0.2, 0.25]]}
+    region = {
+        "type": "path",
+        "points": [[0.1, 0.2], [0.15, 0.22], [0.2, 0.25]],
+        "selection_id": 3,
+    }
     _insert(str(db), "alpha.png", "Freehand issue", region)
 
     units = [_make_single_asset_unit("alpha.png")]
@@ -125,4 +139,58 @@ def test_path_region_markdown_summarizes_point_count(tmp_path):
     )
 
     output = out.getvalue()
-    assert "Region: path (3 points)" in output
+    # Selection number is the only orientation hint emitted in markdown.
+    assert "Selection 3" in output
+    # The point-count summary must not appear in markdown anymore.
+    assert "points)" not in output
+    # The literal region-type word "path" must not appear as a descriptor
+    # (it's still allowed inside "Image path:" headers).
+    descriptor_lines = [
+        line
+        for line in output.splitlines()
+        if line and not line.startswith(("Image path:", "Image name:"))
+    ]
+    for line in descriptor_lines:
+        assert "path" not in line, f"unexpected 'path' descriptor in: {line!r}"
+
+
+def test_path_region_json_retains_full_payload(tmp_path):
+    db = tmp_path / "session.db"
+    _seed_db(str(db))
+    points = [[0.1, 0.2], [0.15, 0.22], [0.2, 0.25]]
+    region = {"type": "path", "points": points, "selection_id": 3}
+    _insert(str(db), "alpha.png", "Freehand issue", region)
+
+    units = [_make_single_asset_unit("alpha.png")]
+    shell, _out, _err = _make_shell(json_output=True)
+    comments = bugshot_workflow._fetch_comments(str(db))
+    summary = bugshot_workflow._process_comments(
+        comments, units, str(tmp_path), shell, json_output=True,
+    )
+
+    assert summary.draft_count == 1
+    draft_region = summary.drafts[0]["region"]
+    assert draft_region["type"] == "path"
+    assert draft_region["points"] == points
+    assert draft_region["selection_id"] == 3
+
+
+def test_markdown_omits_region_line_when_selection_id_missing(tmp_path):
+    db = tmp_path / "session.db"
+    _seed_db(str(db))
+    # Legacy region payload without selection_id should fall back to omitting
+    # the markdown reference entirely; the JSON region payload still carries
+    # the geometry for downstream consumers.
+    region = {"type": "rect", "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4}
+    _insert(str(db), "alpha.png", "Legacy region", region)
+
+    units = [_make_single_asset_unit("alpha.png")]
+    shell, out, _err = _make_shell(json_output=False)
+    comments = bugshot_workflow._fetch_comments(str(db))
+    bugshot_workflow._process_comments(
+        comments, units, str(tmp_path), shell, json_output=False,
+    )
+
+    output = out.getvalue()
+    assert "Selection" not in output
+    assert "Region:" not in output
