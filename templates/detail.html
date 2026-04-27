@@ -39,10 +39,12 @@
         </div>
         <div id="viewer-pane" class="viewer-pane" hidden></div>
         <div class="detail-tools" id="detail-tools" hidden>
-            <span class="detail-tools-label">Tools:</span>
-            <button type="button" class="btn-tool" data-tool="off" aria-pressed="true" title="Off (no drawing)">Off</button>
-            <button type="button" class="btn-tool" data-tool="rect" aria-pressed="false" title="Rectangle (▭)">▭ Rect</button>
-            <button type="button" class="btn-tool" data-tool="path" aria-pressed="false" title="Freehand (✎)">✎ Freehand</button>
+            <span class="detail-tools-label">Tool:</span>
+            <div class="tool-segmented" role="radiogroup" aria-label="Drawing tool">
+                <button type="button" class="btn-tool" data-tool="off" role="radio" aria-pressed="true" aria-checked="true" title="Off (no drawing)"><span class="btn-tool-icon" aria-hidden="true">⊘</span><span class="btn-tool-label">Off</span></button>
+                <button type="button" class="btn-tool" data-tool="rect" role="radio" aria-pressed="false" aria-checked="false" title="Rectangle (▭)"><span class="btn-tool-icon" aria-hidden="true">▭</span><span class="btn-tool-label">Rect</span></button>
+                <button type="button" class="btn-tool" data-tool="path" role="radio" aria-pressed="false" aria-checked="false" title="Freehand (✎)"><span class="btn-tool-icon" aria-hidden="true">✎</span><span class="btn-tool-label">Freehand</span></button>
+            </div>
             <span class="pending-region-indicator" id="pending-region-indicator" hidden>
                 <span class="pending-region-label">Region: <span id="pending-region-type">rect</span> attached</span>
                 <button type="button" class="btn-cancel-region" id="cancel-pending-region" title="Discard pending region">×</button>

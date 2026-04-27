@@ -23,7 +23,18 @@
     var TOOL_OFF = "off";
     var TOOL_RECT = "rect";
     var TOOL_PATH = "path";
-    var ACTIVE_TOOL_CLASS = "tool-active";
+    // Tool order drives the cycle-tool shortcut. Insert future tools (e.g. ellipse)
+    // here and the segmented control + cycle behavior will pick them up automatically.
+    var TOOL_ORDER = [TOOL_OFF, TOOL_RECT, TOOL_PATH];
+    // Per-tool CSS class applied to the region overlay. Drives the cursor shown
+    // over the asset (off → default, rect → crosshair, freehand → pen). The "off"
+    // tool intentionally has no class so pointer-events stay none and clicks pass
+    // through to the underlying asset.
+    var TOOL_OVERLAY_CLASS = {
+        rect: "tool-mode-rect",
+        path: "tool-mode-path"
+    };
+    var ALL_TOOL_OVERLAY_CLASSES = ["tool-mode-rect", "tool-mode-path"];
     var REGION_LINE_COLOR = "rgba(64, 200, 240, 0.95)";
     var REGION_FILL_COLOR = "rgba(64, 200, 240, 0.18)";
     var REGION_PENDING_DASH = [6, 4];
@@ -1179,18 +1190,19 @@
     function setActiveTool(state, tool) {
         state.activeTool = tool;
         Array.prototype.slice.call(document.querySelectorAll(".btn-tool")).forEach(function (btn) {
-            btn.setAttribute(
-                "aria-pressed",
-                btn.getAttribute("data-tool") === tool ? "true" : "false"
-            );
+            var isActive = btn.getAttribute("data-tool") === tool;
+            btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+            btn.setAttribute("aria-checked", isActive ? "true" : "false");
         });
         if (!state.overlay) {
             return;
         }
-        if (tool === TOOL_OFF) {
-            state.overlay.classList.remove(ACTIVE_TOOL_CLASS);
-        } else {
-            state.overlay.classList.add(ACTIVE_TOOL_CLASS);
+        ALL_TOOL_OVERLAY_CLASSES.forEach(function (cls) {
+            state.overlay.classList.remove(cls);
+        });
+        var nextClass = TOOL_OVERLAY_CLASS[tool];
+        if (nextClass) {
+            state.overlay.classList.add(nextClass);
         }
     }
 
@@ -1351,9 +1363,8 @@
     function cycleActiveTool() {
         var pressed = document.querySelector(".btn-tool[aria-pressed='true']");
         var current = pressed ? pressed.getAttribute("data-tool") : TOOL_OFF;
-        var order = [TOOL_OFF, TOOL_RECT, TOOL_PATH];
-        var idx = order.indexOf(current);
-        var next = order[(idx + 1) % order.length];
+        var idx = TOOL_ORDER.indexOf(current);
+        var next = TOOL_ORDER[(idx + 1) % TOOL_ORDER.length];
         var nextButton = document.querySelector(".btn-tool[data-tool='" + next + "']");
         if (nextButton) {
             nextButton.click();

@@ -1039,27 +1039,53 @@ header h1 {
     margin-right: 0.25rem;
 }
 
-.btn-tool {
-    padding: 0.3rem 0.6rem;
+.tool-segmented {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    overflow: hidden;
     background: var(--panel);
-    border: 1px solid var(--border);
-    color: var(--text);
+}
+
+.btn-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--text-muted);
     cursor: pointer;
-    border-radius: 4px;
     font-family: inherit;
     font-size: 13px;
-    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tool-segmented .btn-tool:last-child {
+    border-right: none;
+}
+
+.btn-tool .btn-tool-icon {
+    font-size: 14px;
+    line-height: 1;
 }
 
 .btn-tool:hover {
-    border-color: var(--accent);
+    background: var(--bg-muted);
     color: var(--accent-strong);
 }
 
 .btn-tool[aria-pressed="true"] {
     background: var(--bg-muted);
-    border-color: var(--accent);
     color: var(--accent-strong);
+    box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.btn-tool:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
 }
 
 .pending-region-indicator {
@@ -1104,9 +1130,24 @@ header h1 {
     z-index: 5;
 }
 
-.region-overlay.tool-active {
+/* Per-mode overlay classes. Adding any tool-mode-* class enables pointer
+   events; the cursor reflects the active drawing tool. The "off" tool adds no
+   class so clicks pass through to the asset. Future tools (e.g. ellipse) add
+   another tool-mode-* class with its own cursor. */
+.region-overlay.tool-mode-rect,
+.region-overlay.tool-mode-path {
     pointer-events: auto;
+}
+
+.region-overlay.tool-mode-rect {
     cursor: crosshair;
+}
+
+/* Freehand uses an inline SVG pen cursor with a light outline so it reads on
+   both light and dark assets. Hotspot is at the pen tip (2, 22). Falls back to
+   crosshair where SVG cursors are not supported. */
+.region-overlay.tool-mode-path {
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M3 21l3.2-1 11.4-11.4-2.2-2.2L4 17.8 3 21z" fill="white" stroke="black" stroke-width="1.2" stroke-linejoin="round"/><path d="M14.5 4.4l2.2 2.2 1.6-1.6a1 1 0 0 0 0-1.4l-.8-.8a1 1 0 0 0-1.4 0l-1.6 1.6z" fill="black"/></svg>') 2 22, crosshair;
 }
 
 .region-badge {
