@@ -1,5 +1,11 @@
 .worktrees/
+.superpowers/
 !.claude/
 !.claude/skills/
 !.claude/skills/**
 __pycache__/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
