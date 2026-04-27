@@ -474,6 +474,65 @@ def unit_detail_payload(unit, review_root):
     return payload
 
 
+_SHORTCUT_LEGEND_ROW_NAVIGATION = [
+    ("1-9", "jump"),
+    ("0", "last"),
+    ("g", "go to #"),
+    ("n/.", "next"),
+    ("p/,", "previous"),
+    ("i", "index"),
+]
+
+_SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED = [
+    ("c", "copy filename / unit id"),
+    ("/", "comment"),
+    ("d", "cycle tool"),
+    ("m/M", "mode"),
+    ("q", "quit"),
+    ("Esc", "unfocus"),
+]
+
+_SHORTCUT_LEGEND_ROW_ACTIONS_FLAT = [
+    ("c", "copy filename"),
+    ("/", "comment"),
+    ("d", "cycle tool"),
+    ("m/M", "mode"),
+    ("q", "quit"),
+    ("Esc", "unfocus"),
+]
+
+
+def _render_shortcut_legend(flat_mode):
+    """Render the detail-page shortcut legend as a two-row HTML block.
+
+    Two-row layout chosen over a single line for scannability; mono-styled key
+    spans give each shortcut a visually consistent leading column. In flat mode
+    the unit id equals the filename, so the redundant '/ unit id' suffix is
+    dropped from the copy-filename entry.
+    """
+    actions_row = (
+        _SHORTCUT_LEGEND_ROW_ACTIONS_FLAT if flat_mode
+        else _SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED
+    )
+    rows_html = "".join(
+        _render_legend_row(items)
+        for items in (_SHORTCUT_LEGEND_ROW_NAVIGATION, actions_row)
+    )
+    return f'<div class="detail-shortcut-legend">{rows_html}</div>'
+
+
+def _render_legend_row(items):
+    item_html = " · ".join(
+        (
+            '<span class="detail-shortcut-legend-item">'
+            f'<span class="detail-shortcut-legend-key">{key}</span> {label}'
+            '</span>'
+        )
+        for key, label in items
+    )
+    return f'<div class="detail-shortcut-legend-row">{item_html}</div>'
+
+
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
@@ -583,11 +642,13 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             for item in self.units
         ]
 
+        flat_mode = all(item["relative_dir"] == "" for item in self.units)
         replacements = {
             "{{unit_label}}": unit["label"],
             "{{unit_json}}": json.dumps(self._serialize_unit_for_detail(unit)),
             "{{nav_json}}": json.dumps(nav),
             "{{units_json}}": json.dumps(detail_units),
+            "{{shortcut_legend_html}}": _render_shortcut_legend(flat_mode),
         }
         content = template
         for key, value in replacements.items():

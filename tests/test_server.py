@@ -128,9 +128,12 @@ def test_detail_page_exposes_copy_filename_control(server):
     assert 'class="copy-filename-icon"' in body
     assert "<span>Copy</span>" in body
     assert "alpha.png" in body
-    assert "c copy filename" in body
-    assert "n/. next" in body
-    assert "p/, previous" in body
+    assert 'class="detail-shortcut-legend"' in body
+    assert ">c</span> copy filename" in body
+    # Flat-mode review root (single-image units): no '/ unit id' suffix.
+    assert "/ unit id" not in body
+    assert ">n/.</span> next" in body
+    assert ">p/,</span> previous" in body
 
 
 def test_grouped_detail_page_renders_assets_and_metadata(grouped_server):
@@ -147,6 +150,14 @@ def test_grouped_detail_page_renders_assets_and_metadata(grouped_server):
     assert body.index('id="comment-form"') < body.index('id="unit-metadata"')
     assert 'id="detail-theme-controls"' in body
     assert '"primary_color": "#111111"' in body
+
+
+def test_grouped_detail_page_legend_keeps_unit_id_label(grouped_server):
+    resp = urllib.request.urlopen(f"{grouped_server.url}/view/login-button")
+    body = resp.read().decode()
+    # Grouped review units: filename != unit id, so the disambiguating
+    # '/ unit id' suffix on the copy-filename shortcut must remain.
+    assert ">c</span> copy filename / unit id" in body
 
 
 def test_grouped_svg_asset_serves_with_svg_content_type(grouped_server):
@@ -471,7 +482,7 @@ def test_detail_page_includes_tools_toolbar_markup(server):
     assert 'data-tool="path"' in body
     assert 'data-tool="off"' in body
     assert 'id="pending-region-indicator"' in body
-    assert "d cycle tool" in body
+    assert ">d</span> cycle tool" in body
 
 
 def test_gallery_js_wires_region_tool_shortcut(repo_root):

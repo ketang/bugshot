@@ -272,6 +272,30 @@ header h1 {
     text-align: center;
 }
 
+.detail-shortcut-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-top: 12px;
+}
+
+.detail-shortcut-legend-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 10px;
+}
+
+.detail-shortcut-legend-item {
+    white-space: nowrap;
+}
+
+.detail-shortcut-legend-key {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
 .gallery {
     display: grid;
     gap: 16px;
