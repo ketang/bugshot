@@ -102,6 +102,11 @@
     var vizdiffFilters = null;
     var vizdiffUnits = null;
     var vizdiffDetailActive = false;
+    // Region-drawing state for the detail page's current unit. Null on the
+    // index page or before initDetail runs. Exposed at module scope so the
+    // top-level keydown handler can drive ArrowUp/ArrowDown comment-list
+    // navigation through the same highlight machinery (qh9) that hover uses.
+    var currentRegionState = null;
 
     applyTheme(currentTheme, false);
     initServerStatusBanner();
@@ -220,6 +225,12 @@
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_FOCUS_COMMENT && isDetail) {
             focusCommentInput();
+            event.preventDefault();
+        } else if (event.key === "ArrowDown" && isDetail && !hasModifier) {
+            focusAdjacentComment(1);
+            event.preventDefault();
+        } else if (event.key === "ArrowUp" && isDetail && !hasModifier) {
+            focusAdjacentComment(-1);
             event.preventDefault();
         }
     });
@@ -1227,6 +1238,66 @@
         }
     }
 
+    // ArrowUp/ArrowDown navigation through the comment list. Reuses the qh9
+    // hover-highlight code path: setHighlightedSelection drives both
+    // .is-hovered on the matching comment row and the canvas paint via
+    // renderDrawState. Image-level rows (no data-selection-id) clear the
+    // canvas highlight and we add .is-hovered manually so the focused row
+    // still gets the visual treatment.
+    //
+    // Wrap behavior: enabled. Pressing ArrowDown on the last row jumps to
+    // the first; ArrowUp on the first jumps to the last. Matches the feel
+    // of the existing 1-9/0 numeric jump shortcuts on the index page.
+    function focusAdjacentComment(direction) {
+        var commentsList = document.getElementById("comments-list");
+        if (!commentsList) {
+            return;
+        }
+        var rows = Array.prototype.slice.call(
+            commentsList.querySelectorAll(".comment-item")
+        );
+        if (rows.length === 0) {
+            return;
+        }
+        var currentIndex = -1;
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].classList.contains("is-hovered")) {
+                currentIndex = i;
+                break;
+            }
+        }
+        var nextIndex;
+        if (direction > 0) {
+            nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % rows.length;
+        } else {
+            nextIndex = currentIndex === -1
+                ? rows.length - 1
+                : (currentIndex - 1 + rows.length) % rows.length;
+        }
+        var row = rows[nextIndex];
+        var selectionAttr = row.dataset.selectionId;
+        var selectionId = selectionAttr ? parseInt(selectionAttr, 10) : null;
+        if (currentRegionState) {
+            setHighlightedSelection(currentRegionState, selectionId);
+        } else {
+            // Region drawing unavailable for this unit: no canvas to paint,
+            // but we still drive the comment-row hover state directly so
+            // navigation works on multi-asset / ANSI / non-image units.
+            var hovered = commentsList.querySelectorAll(".comment-item.is-hovered");
+            for (var j = 0; j < hovered.length; j++) {
+                hovered[j].classList.remove("is-hovered");
+            }
+        }
+        if (selectionId == null) {
+            // Image-level row: setHighlightedSelection(state, null) cleared
+            // .is-hovered from every row; restore it on the focused row.
+            row.classList.add("is-hovered");
+        }
+        if (typeof row.scrollIntoView === "function") {
+            row.scrollIntoView({ block: "nearest" });
+        }
+    }
+
     function setupRegionDrawing(unit, assetsContainer) {
         var state = {
             activeTool: TOOL_OFF,
@@ -1692,6 +1763,7 @@
             regionLegendEntry.hidden = !unitSupportsRegionDrawing(currentUnit);
         }
         var regionState = setupRegionDrawing(currentUnit, assetsContainer);
+        currentRegionState = regionState;
 
         previousSlot.appendChild(
             createNavigationButton({
