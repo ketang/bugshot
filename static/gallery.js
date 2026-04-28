@@ -1316,7 +1316,9 @@
 
     function setActiveTool(state, tool) {
         state.activeTool = tool;
-        Array.prototype.slice.call(document.querySelectorAll(".btn-tool")).forEach(function (btn) {
+        var toolbar = document.getElementById("detail-tools");
+        var toolButtons = toolbar ? toolbar.querySelectorAll(".btn-tool") : [];
+        Array.prototype.slice.call(toolButtons).forEach(function (btn) {
             var isActive = btn.getAttribute("data-tool") === tool;
             btn.setAttribute("aria-pressed", isActive ? "true" : "false");
             btn.setAttribute("aria-checked", isActive ? "true" : "false");
