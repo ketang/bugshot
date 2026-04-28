@@ -563,6 +563,26 @@ def test_gallery_js_wires_region_hover_highlight(repo_root):
     assert "region-hover-active" in script
 
 
+def test_gallery_js_arrow_keys_navigate_comment_list(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    # ArrowUp/ArrowDown keydown branch on detail pages.
+    assert '"ArrowDown"' in script
+    assert '"ArrowUp"' in script
+    # A dedicated helper that reuses the qh9 highlight code path.
+    assert "function focusAdjacentComment(" in script
+    # The helper must reuse setHighlightedSelection rather than reimplement
+    # the hover highlight or canvas paint.
+    helper_start = script.index("function focusAdjacentComment(")
+    helper_end = script.index("\n    }\n", helper_start)
+    helper_body = script[helper_start:helper_end]
+    assert "setHighlightedSelection" in helper_body
+    # The "no input/textarea focused" gate is shared with the existing
+    # shortcut dispatch — the arrow branch must live inside it.
+    arrow_index = script.index('"ArrowDown"')
+    typing_guard_index = script.index('activeElement.tagName === "TEXTAREA"')
+    assert typing_guard_index < arrow_index
+
+
 def test_detail_styles_subdue_committed_regions(repo_root):
     style = open(f"{repo_root}/static/style.css").read()
     assert ".comment-item.is-hovered" in style

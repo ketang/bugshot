@@ -1,5 +1,5 @@
 <!-- launch-work-log
-last-updated: 2026-04-28T14:18:01Z
+last-updated: 2026-04-28T16:27:08Z
 checkpoint: ready-to-land
 -->
 
@@ -11,7 +11,7 @@ checkpoint: ready-to-land
 
 ## Original task
 
-bugshot-xaq: Gate detail-page legend "d cycle tool" entry on unitSupportsRegionDrawing(currentUnit). Render entry as addressable element server-side; toggle hidden state in JS on unit switch.
+bugshot-wpj: Add ArrowUp/ArrowDown keyboard navigation between .comment-item rows on the detail page. Reuse qh9's hover-highlight code path (.is-hovered + canvas selection paint). Works only when no input/textarea is focused.
 
 
 ## Branch & worktree
