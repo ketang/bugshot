@@ -1,5 +1,5 @@
 <!-- launch-work-log
-last-updated: 2026-04-28T05:26:03Z
+last-updated: 2026-04-28T14:18:01Z
 checkpoint: ready-to-land
 -->
 
@@ -11,7 +11,8 @@ checkpoint: ready-to-land
 
 ## Original task
 
-<!-- The user's original request that started this session, in one line. -->
+bugshot-xaq: Gate detail-page legend "d cycle tool" entry on unitSupportsRegionDrawing(currentUnit). Render entry as addressable element server-side; toggle hidden state in JS on unit switch.
+
 
 ## Branch & worktree
 

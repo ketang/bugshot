@@ -474,6 +474,12 @@ def unit_detail_payload(unit, review_root):
     return payload
 
 
+# Element id used by static/gallery.js to toggle the region-drawing legend
+# entry's hidden state based on whether the current unit supports region
+# drawing. Kept as a module constant so the server-side render and any
+# server-side test stay aligned with the JS lookup.
+_LEGEND_REGION_DRAWING_ID = "legend-region-drawing"
+
 _SHORTCUT_LEGEND_ROW_NAVIGATION = [
     ("1-9", "jump"),
     ("0", "last"),
@@ -486,7 +492,7 @@ _SHORTCUT_LEGEND_ROW_NAVIGATION = [
 _SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED = [
     ("c", "copy filename / unit id"),
     ("/", "comment"),
-    ("d", "cycle tool"),
+    ("d", "cycle tool", _LEGEND_REGION_DRAWING_ID),
     ("m/M", "mode"),
     ("q", "quit"),
     ("Esc", "unfocus"),
@@ -495,7 +501,7 @@ _SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED = [
 _SHORTCUT_LEGEND_ROW_ACTIONS_FLAT = [
     ("c", "copy filename"),
     ("/", "comment"),
-    ("d", "cycle tool"),
+    ("d", "cycle tool", _LEGEND_REGION_DRAWING_ID),
     ("m/M", "mode"),
     ("q", "quit"),
     ("Esc", "unfocus"),
@@ -522,14 +528,26 @@ def _render_shortcut_legend(flat_mode):
 
 
 def _render_legend_row(items):
-    item_html = " · ".join(
-        (
-            '<span class="detail-shortcut-legend-item">'
+    """Render one legend row.
+
+    Each item is a (key, label) tuple, or a (key, label, element_id) tuple
+    when the rendered span needs to be uniquely targetable from JS for
+    visibility toggling.
+    """
+    rendered_items = []
+    for item in items:
+        if len(item) == 3:
+            key, label, element_id = item
+            id_attr = f' id="{element_id}"'
+        else:
+            key, label = item
+            id_attr = ""
+        rendered_items.append(
+            f'<span class="detail-shortcut-legend-item"{id_attr}>'
             f'<span class="detail-shortcut-legend-key">{key}</span> {label}'
             '</span>'
         )
-        for key, label in items
-    )
+    item_html = " · ".join(rendered_items)
     return f'<div class="detail-shortcut-legend-row">{item_html}</div>'
 
 

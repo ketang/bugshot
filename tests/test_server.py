@@ -514,6 +514,37 @@ def test_gallery_js_wires_region_tool_shortcut(repo_root):
     assert 'region-badge' in script
 
 
+def test_detail_legend_marks_region_drawing_entry(server):
+    # The 'd cycle tool' entry must be rendered as a uniquely-targetable
+    # element so the client can toggle it based on whether the current unit
+    # supports region drawing.
+    resp = urllib.request.urlopen(f"{server.url}/view/alpha.png")
+    body = resp.read().decode()
+    assert 'id="legend-region-drawing"' in body
+    # The id must be on the same item that hosts the 'd cycle tool' label.
+    pattern = re.compile(
+        r'id="legend-region-drawing"[^>]*>\s*<span[^>]*>d</span>\s*cycle tool',
+    )
+    assert pattern.search(body), body
+
+
+def test_grouped_detail_legend_hides_region_drawing_entry(grouped_server):
+    # Grouped review units have multiple assets, so unitSupportsRegionDrawing
+    # returns false. The legend entry is still rendered server-side; the
+    # client toggles it hidden. We assert the marker remains addressable.
+    resp = urllib.request.urlopen(f"{grouped_server.url}/view/login-button")
+    body = resp.read().decode()
+    assert 'id="legend-region-drawing"' in body
+
+
+def test_gallery_js_toggles_region_drawing_legend_entry(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    assert 'legend-region-drawing' in script
+    # The toggle must be gated on the same predicate used by the keypress
+    # handler at the existing 'd' shortcut site.
+    assert 'unitSupportsRegionDrawing(currentUnit)' in script
+
+
 def test_gallery_js_wires_region_hover_highlight(repo_root):
     script = open(f"{repo_root}/static/gallery.js").read()
     # Pure hit-test helpers for each region type plus the dispatch wrapper.

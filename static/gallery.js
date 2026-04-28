@@ -1682,6 +1682,15 @@
         });
 
         initVizdiffDetailModes(currentUnit);
+        // The detail legend hardcodes a 'd cycle tool' entry server-side so
+        // we can toggle it here using the same predicate that gates the 'd'
+        // keypress and the region-drawing setup. This avoids advertising the
+        // shortcut on units (multi-asset, ANSI, non-image) where pressing
+        // 'd' is a no-op.
+        var regionLegendEntry = document.getElementById("legend-region-drawing");
+        if (regionLegendEntry) {
+            regionLegendEntry.hidden = !unitSupportsRegionDrawing(currentUnit);
+        }
         var regionState = setupRegionDrawing(currentUnit, assetsContainer);
 
         previousSlot.appendChild(
