@@ -22,7 +22,7 @@
         </nav>
     </header>
     <main class="detail-main">
-        <div class="detail-shortcut-legend">1-9 jump · 0 last · g go to # · c copy filename / unit id · n/. next · p/, previous · i index · q quit · / comment · m/M mode · Esc unfocus</div>
+        {{shortcut_legend_html}}
         <div id="mode-bar" class="mode-bar" hidden>
             <span class="mode-bar-label">Mode:</span>
             <div class="mode-button-group" role="radiogroup">
@@ -38,6 +38,19 @@
             </label>
         </div>
         <div id="viewer-pane" class="viewer-pane" hidden></div>
+        <div class="detail-tools" id="detail-tools" hidden>
+            <span class="detail-tools-label">Tool:</span>
+            <div class="tool-segmented" role="radiogroup" aria-label="Drawing tool">
+                <button type="button" class="btn-tool" data-tool="off" role="radio" aria-pressed="true" aria-checked="true" title="Off (no drawing)"><span class="btn-tool-icon" aria-hidden="true">⊘</span><span class="btn-tool-label">Off</span></button>
+                <button type="button" class="btn-tool" data-tool="rect" role="radio" aria-pressed="false" aria-checked="false" title="Rectangle (▭)"><span class="btn-tool-icon" aria-hidden="true">▭</span><span class="btn-tool-label">Rect</span></button>
+                <button type="button" class="btn-tool" data-tool="ellipse" role="radio" aria-pressed="false" aria-checked="false" title="Ellipse (◯)"><span class="btn-tool-icon" aria-hidden="true">◯</span><span class="btn-tool-label">Ellipse</span></button>
+                <button type="button" class="btn-tool" data-tool="path" role="radio" aria-pressed="false" aria-checked="false" title="Freehand (✎)"><span class="btn-tool-icon" aria-hidden="true">✎</span><span class="btn-tool-label">Freehand</span></button>
+            </div>
+            <span class="pending-region-indicator" id="pending-region-indicator" hidden>
+                <span class="pending-region-label">Region: <span id="pending-region-type">rect</span> attached</span>
+                <button type="button" class="btn-cancel-region" id="cancel-pending-region" title="Discard pending region">×</button>
+            </span>
+        </div>
         <div class="detail-content">
             <div id="unit-assets" class="unit-assets">
                 <!-- Unit assets injected by gallery.js -->

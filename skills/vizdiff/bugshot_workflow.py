@@ -174,11 +174,30 @@ def _fetch_comments(db_path: str) -> list[dict[str, object]]:
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            "SELECT id, unit_id, body, created_at FROM comments ORDER BY id"
+            "SELECT id, unit_id, body, region, created_at FROM comments ORDER BY id"
         ).fetchall()
     finally:
         conn.close()
-    return [dict(row) for row in rows]
+
+    items = []
+    for row in rows:
+        item = dict(row)
+        item["region"] = json.loads(item["region"]) if item["region"] else None
+        items.append(item)
+    return items
+
+
+def _format_region(region: dict[str, object]) -> str | None:
+    """Return a one-line markdown reference for a region, or None to omit.
+
+    The full region payload is preserved in the JSON output; the markdown
+    line exists only as a human-readable orientation hint pointing at the
+    on-canvas selection number (assigned by the gallery server).
+    """
+    selection_id = region.get("selection_id")
+    if isinstance(selection_id, int) and selection_id >= 1:
+        return f"Selection {selection_id}"
+    return None
 
 
 def _process_comments(
@@ -202,6 +221,7 @@ def _process_comments(
             continue
 
         user_comment = comment["body"]
+        region = comment.get("region")
         unit_path = (
             os.path.join(screenshot_dir, unit["relative_dir"])
             if unit["relative_dir"]
@@ -239,6 +259,7 @@ def _process_comments(
                 "image_name": assets[0]["name"],
                 "image_path": assets[0]["path"],
                 "user_comment": user_comment,
+                "region": region,
             }
         else:
             draft = {
@@ -263,6 +284,10 @@ def _process_comments(
             if len(assets) == 1:
                 io.write(f"Image name: {assets[0]['name']}")
                 io.write(f"Image path: {assets[0]['path']}")
+                if region is not None:
+                    region_line = _format_region(region)
+                    if region_line is not None:
+                        io.write(region_line)
             else:
                 io.write(f"Unit id: {unit['id']}")
                 io.write(f"Unit path: {unit_path}")
