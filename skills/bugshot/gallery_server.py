@@ -474,6 +474,83 @@ def unit_detail_payload(unit, review_root):
     return payload
 
 
+# Element id used by static/gallery.js to toggle the region-drawing legend
+# entry's hidden state based on whether the current unit supports region
+# drawing. Kept as a module constant so the server-side render and any
+# server-side test stay aligned with the JS lookup.
+_LEGEND_REGION_DRAWING_ID = "legend-region-drawing"
+
+_SHORTCUT_LEGEND_ROW_NAVIGATION = [
+    ("1-9", "jump"),
+    ("0", "last"),
+    ("g", "go to #"),
+    ("n/.", "next"),
+    ("p/,", "previous"),
+    ("i", "index"),
+]
+
+_SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED = [
+    ("c", "copy filename / unit id"),
+    ("/", "comment"),
+    ("d", "cycle tool", _LEGEND_REGION_DRAWING_ID),
+    ("m/M", "mode"),
+    ("q", "quit"),
+    ("Esc", "unfocus"),
+]
+
+_SHORTCUT_LEGEND_ROW_ACTIONS_FLAT = [
+    ("c", "copy filename"),
+    ("/", "comment"),
+    ("d", "cycle tool", _LEGEND_REGION_DRAWING_ID),
+    ("m/M", "mode"),
+    ("q", "quit"),
+    ("Esc", "unfocus"),
+]
+
+
+def _render_shortcut_legend(flat_mode):
+    """Render the detail-page shortcut legend as a two-row HTML block.
+
+    Two-row layout chosen over a single line for scannability; mono-styled key
+    spans give each shortcut a visually consistent leading column. In flat mode
+    the unit id equals the filename, so the redundant '/ unit id' suffix is
+    dropped from the copy-filename entry.
+    """
+    actions_row = (
+        _SHORTCUT_LEGEND_ROW_ACTIONS_FLAT if flat_mode
+        else _SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED
+    )
+    rows_html = "".join(
+        _render_legend_row(items)
+        for items in (_SHORTCUT_LEGEND_ROW_NAVIGATION, actions_row)
+    )
+    return f'<div class="detail-shortcut-legend">{rows_html}</div>'
+
+
+def _render_legend_row(items):
+    """Render one legend row.
+
+    Each item is a (key, label) tuple, or a (key, label, element_id) tuple
+    when the rendered span needs to be uniquely targetable from JS for
+    visibility toggling.
+    """
+    rendered_items = []
+    for item in items:
+        if len(item) == 3:
+            key, label, element_id = item
+            id_attr = f' id="{element_id}"'
+        else:
+            key, label = item
+            id_attr = ""
+        rendered_items.append(
+            f'<span class="detail-shortcut-legend-item"{id_attr}>'
+            f'<span class="detail-shortcut-legend-key">{key}</span> {label}'
+            '</span>'
+        )
+    item_html = " · ".join(rendered_items)
+    return f'<div class="detail-shortcut-legend-row">{item_html}</div>'
+
+
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
@@ -583,11 +660,13 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             for item in self.units
         ]
 
+        flat_mode = all(item["relative_dir"] == "" for item in self.units)
         replacements = {
             "{{unit_label}}": unit["label"],
             "{{unit_json}}": json.dumps(self._serialize_unit_for_detail(unit)),
             "{{nav_json}}": json.dumps(nav),
             "{{units_json}}": json.dumps(detail_units),
+            "{{shortcut_legend_html}}": _render_shortcut_legend(flat_mode),
         }
         content = template
         for key, value in replacements.items():
@@ -660,18 +739,23 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         try:
             if unit_id:
                 rows = conn.execute(
-                    "SELECT id, unit_id, body, created_at FROM comments "
+                    "SELECT id, unit_id, body, region, created_at FROM comments "
                     "WHERE unit_id = ? ORDER BY id",
                     (unit_id,),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT id, unit_id, body, created_at FROM comments ORDER BY id"
+                    "SELECT id, unit_id, body, region, created_at FROM comments ORDER BY id"
                 ).fetchall()
         finally:
             conn.close()
 
-        self._send_json([dict(row) for row in rows])
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["region"] = json.loads(item["region"]) if item["region"] else None
+            items.append(item)
+        self._send_json(items)
 
     def _handle_comment_create(self):
         data = self._read_json_body()
@@ -684,19 +768,25 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": f"unknown unit_id: {unit_id}"}, status=400)
             return
 
+        region = data.get("region")
+        region_text = json.dumps(region) if region is not None else None
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.execute(
-            "INSERT INTO comments (unit_id, body) VALUES (?, ?)",
-            (unit_id, body),
+            "INSERT INTO comments (unit_id, body, region) VALUES (?, ?, ?)",
+            (unit_id, body, region_text),
         )
         conn.commit()
         row = conn.execute(
-            "SELECT id, unit_id, body, created_at FROM comments WHERE id = ?",
+            "SELECT id, unit_id, body, region, created_at FROM comments WHERE id = ?",
             (cursor.lastrowid,),
         ).fetchone()
         conn.close()
-        self._send_json(dict(row))
+
+        item = dict(row)
+        item["region"] = json.loads(item["region"]) if item["region"] else None
+        self._send_json(item)
 
     def _handle_comment_update(self, comment_id):
         data = self._read_json_body()
@@ -705,15 +795,28 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": "body is required"}, status=400)
             return
 
+        region_supplied = "region" in data
+        region_text = (
+            json.dumps(data["region"])
+            if region_supplied and data["region"] is not None
+            else None
+        )
+
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        conn.execute(
-            "UPDATE comments SET body = ? WHERE id = ?",
-            (body, comment_id),
-        )
+        if region_supplied:
+            conn.execute(
+                "UPDATE comments SET body = ?, region = ? WHERE id = ?",
+                (body, region_text, comment_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE comments SET body = ? WHERE id = ?",
+                (body, comment_id),
+            )
         conn.commit()
         row = conn.execute(
-            "SELECT id, unit_id, body, created_at FROM comments WHERE id = ?",
+            "SELECT id, unit_id, body, region, created_at FROM comments WHERE id = ?",
             (comment_id,),
         ).fetchone()
         conn.close()
@@ -721,7 +824,10 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         if row is None:
             self._send_json({"error": "not found"}, status=404)
             return
-        self._send_json(dict(row))
+
+        item = dict(row)
+        item["region"] = json.loads(item["region"]) if item["region"] else None
+        self._send_json(item)
 
     def _handle_comment_delete(self, comment_id):
         conn = sqlite3.connect(self.db_path)
@@ -801,6 +907,7 @@ def init_db(db_path):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             unit_id TEXT NOT NULL,
             body TEXT NOT NULL,
+            region TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
         """

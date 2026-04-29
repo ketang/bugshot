@@ -19,6 +19,53 @@
     var SHORTCUT_KEY_MODE_PREV = "M";
     var VIZDIFF_MODE_KEY = "bugshot:vizdiff:mode";
     var VIZDIFF_MODES = ["side-by-side", "swipe", "onion", "diff"];
+    var SHORTCUT_KEY_CYCLE_TOOL = "d";
+    var TOOL_OFF = "off";
+    var TOOL_RECT = "rect";
+    var TOOL_ELLIPSE = "ellipse";
+    var TOOL_PATH = "path";
+    // Tool order drives the cycle-tool shortcut. Insert future tools here and
+    // the segmented control + cycle behavior will pick them up automatically.
+    var TOOL_ORDER = [TOOL_OFF, TOOL_RECT, TOOL_ELLIPSE, TOOL_PATH];
+    // Per-tool CSS class applied to the region overlay. Drives the cursor shown
+    // over the asset (off → default, rect/ellipse → crosshair, freehand → pen).
+    // The "off" tool intentionally has no class so pointer-events stay none
+    // and clicks pass through to the underlying asset.
+    var TOOL_OVERLAY_CLASS = {
+        rect: "tool-mode-rect",
+        ellipse: "tool-mode-ellipse",
+        path: "tool-mode-path"
+    };
+    var ALL_TOOL_OVERLAY_CLASSES = [
+        "tool-mode-rect",
+        "tool-mode-ellipse",
+        "tool-mode-path"
+    ];
+    var REGION_LINE_COLOR = "rgba(64, 200, 240, 0.95)";
+    var REGION_FILL_COLOR = "rgba(64, 200, 240, 0.18)";
+    // Subdued styling for committed regions when nothing is being highlighted.
+    // Hover-highlight (bugshot-qh9) restores REGION_LINE_COLOR / REGION_FILL_COLOR
+    // for the matched region only.
+    var REGION_LINE_COLOR_DIM = "rgba(64, 200, 240, 0.42)";
+    var REGION_FILL_COLOR_DIM = "rgba(64, 200, 240, 0.07)";
+    var REGION_DEFAULT_LINE_WIDTH = 2;
+    var REGION_HIGHLIGHT_LINE_WIDTH = 3;
+    // Hit-test tolerance (in screen pixels) for path-style regions. Converted to
+    // normalized units against the larger image dimension at hit-test time.
+    var PATH_HIT_PAD_PIXELS = 8;
+    var REGION_PENDING_DASH = [6, 4];
+    var REGION_COMMITTED_DASH = [];
+    var MIN_RECT_NORMALIZED_SIZE = 0.005;
+    var MIN_ELLIPSE_NORMALIZED_RADIUS = 0.0025;
+    var MIN_PATH_POINT_COUNT = 2;
+    var SELECTION_BADGE_FILL = "rgba(64, 200, 240, 0.95)";
+    var SELECTION_BADGE_STROKE = "rgba(11, 20, 24, 0.85)";
+    var SELECTION_BADGE_TEXT_COLOR = "#0b1418";
+    var SELECTION_BADGE_FONT_PX = 14;
+    var SELECTION_BADGE_PADDING_X = 6;
+    var SELECTION_BADGE_PADDING_Y = 3;
+    var SELECTION_BADGE_RADIUS = 4;
+    var SELECTION_BADGE_OFFSET = 2;
     var DIGIT_KEYS = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
     var VIZDIFF_FILTER_KEY = "bugshot:vizdiff:filters";
     var VIZDIFF_DEFAULT_FILTERS = {
@@ -55,6 +102,11 @@
     var vizdiffFilters = null;
     var vizdiffUnits = null;
     var vizdiffDetailActive = false;
+    // Region-drawing state for the detail page's current unit. Null on the
+    // index page or before initDetail runs. Exposed at module scope so the
+    // top-level keydown handler can drive ArrowUp/ArrowDown comment-list
+    // navigation through the same highlight machinery (qh9) that hover uses.
+    var currentRegionState = null;
 
     applyTheme(currentTheme, false);
     initServerStatusBanner();
@@ -164,8 +216,21 @@
                 completeSession();
             }
             event.preventDefault();
+        } else if (
+            event.key === SHORTCUT_KEY_CYCLE_TOOL &&
+            isDetail &&
+            unitSupportsRegionDrawing(currentUnit)
+        ) {
+            cycleActiveTool();
+            event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_FOCUS_COMMENT && isDetail) {
             focusCommentInput();
+            event.preventDefault();
+        } else if (event.key === "ArrowDown" && isDetail && !hasModifier) {
+            focusAdjacentComment(1);
+            event.preventDefault();
+        } else if (event.key === "ArrowUp" && isDetail && !hasModifier) {
+            focusAdjacentComment(-1);
             event.preventDefault();
         }
     });
@@ -1073,6 +1138,608 @@
         navigateTo("/view/" + units[units.length - 1].encoded_id);
     }
 
+    function unitSupportsRegionDrawing(unit) {
+        if (!unit || !unit.assets || unit.assets.length !== 1) {
+            return false;
+        }
+        var assetType = unit.assets[0].type;
+        return assetType === "image" || assetType === "svg";
+    }
+
+    // Pure hit-test helpers operate on normalized [0, 1] coordinates so they
+    // are independent of overlay/image dimensions. The path tolerance is also
+    // in normalized units; callers translate from screen pixels.
+    function hitTestRect(px, py, region) {
+        return px >= region.x && px <= region.x + region.w &&
+               py >= region.y && py <= region.y + region.h;
+    }
+
+    function hitTestEllipse(px, py, region) {
+        if (!region.rx || !region.ry) {
+            return false;
+        }
+        var dx = (px - region.cx) / region.rx;
+        var dy = (py - region.cy) / region.ry;
+        return dx * dx + dy * dy <= 1;
+    }
+
+    function distancePointToSegment(px, py, x1, y1, x2, y2) {
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        var lenSq = dx * dx + dy * dy;
+        var t = 0;
+        if (lenSq > 0) {
+            t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+            if (t < 0) { t = 0; } else if (t > 1) { t = 1; }
+        }
+        var ex = px - (x1 + t * dx);
+        var ey = py - (y1 + t * dy);
+        return Math.sqrt(ex * ex + ey * ey);
+    }
+
+    function hitTestPath(px, py, region, tolerance) {
+        var pts = region.points || [];
+        if (pts.length < 2) {
+            return false;
+        }
+        for (var i = 0; i < pts.length - 1; i++) {
+            if (distancePointToSegment(
+                    px, py,
+                    pts[i][0], pts[i][1],
+                    pts[i + 1][0], pts[i + 1][1]
+                ) <= tolerance) {
+                return true;
+            }
+        }
+        // The path is rendered with closePath() in paintRegion, so include the
+        // implicit closing segment in hit-testing for visual parity.
+        var first = pts[0];
+        var last = pts[pts.length - 1];
+        return distancePointToSegment(
+            px, py,
+            last[0], last[1],
+            first[0], first[1]
+        ) <= tolerance;
+    }
+
+    function hitTestRegions(px, py, regions, pathTolerance) {
+        // Topmost (last drawn) wins on overlap.
+        for (var i = regions.length - 1; i >= 0; i--) {
+            var r = regions[i];
+            if (r.type === TOOL_RECT && hitTestRect(px, py, r)) { return r; }
+            if (r.type === TOOL_ELLIPSE && hitTestEllipse(px, py, r)) { return r; }
+            if (r.type === TOOL_PATH && hitTestPath(px, py, r, pathTolerance)) { return r; }
+        }
+        return null;
+    }
+
+    function setHighlightedSelection(state, selectionId) {
+        if (state.highlightedSelectionId === selectionId) {
+            return;
+        }
+        state.highlightedSelectionId = selectionId;
+        syncHighlightedComment(selectionId);
+        renderDrawState(state);
+    }
+
+    function syncHighlightedComment(selectionId) {
+        var hovered = document.querySelectorAll(".comment-item.is-hovered");
+        for (var i = 0; i < hovered.length; i++) {
+            hovered[i].classList.remove("is-hovered");
+        }
+        if (selectionId == null) {
+            return;
+        }
+        var match = document.querySelector(
+            '.comment-item[data-selection-id="' + selectionId + '"]'
+        );
+        if (match) {
+            match.classList.add("is-hovered");
+        }
+    }
+
+    // ArrowUp/ArrowDown navigation through the comment list. Reuses the qh9
+    // hover-highlight code path: setHighlightedSelection drives both
+    // .is-hovered on the matching comment row and the canvas paint via
+    // renderDrawState. Image-level rows (no data-selection-id) clear the
+    // canvas highlight and we add .is-hovered manually so the focused row
+    // still gets the visual treatment.
+    //
+    // Wrap behavior: enabled. Pressing ArrowDown on the last row jumps to
+    // the first; ArrowUp on the first jumps to the last. Matches the feel
+    // of the existing 1-9/0 numeric jump shortcuts on the index page.
+    function focusAdjacentComment(direction) {
+        var commentsList = document.getElementById("comments-list");
+        if (!commentsList) {
+            return;
+        }
+        var rows = Array.prototype.slice.call(
+            commentsList.querySelectorAll(".comment-item")
+        );
+        if (rows.length === 0) {
+            return;
+        }
+        var currentIndex = -1;
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].classList.contains("is-hovered")) {
+                currentIndex = i;
+                break;
+            }
+        }
+        var nextIndex;
+        if (direction > 0) {
+            nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % rows.length;
+        } else {
+            nextIndex = currentIndex === -1
+                ? rows.length - 1
+                : (currentIndex - 1 + rows.length) % rows.length;
+        }
+        var row = rows[nextIndex];
+        var selectionAttr = row.dataset.selectionId;
+        var selectionId = selectionAttr ? parseInt(selectionAttr, 10) : null;
+        if (currentRegionState) {
+            setHighlightedSelection(currentRegionState, selectionId);
+        } else {
+            // Region drawing unavailable for this unit: no canvas to paint,
+            // but we still drive the comment-row hover state directly so
+            // navigation works on multi-asset / ANSI / non-image units.
+            var hovered = commentsList.querySelectorAll(".comment-item.is-hovered");
+            for (var j = 0; j < hovered.length; j++) {
+                hovered[j].classList.remove("is-hovered");
+            }
+        }
+        if (selectionId == null) {
+            // Image-level row: setHighlightedSelection(state, null) cleared
+            // .is-hovered from every row; restore it on the focused row.
+            row.classList.add("is-hovered");
+        }
+        if (typeof row.scrollIntoView === "function") {
+            row.scrollIntoView({ block: "nearest" });
+        }
+    }
+
+    function setupRegionDrawing(unit, assetsContainer) {
+        var state = {
+            activeTool: TOOL_OFF,
+            pendingRegion: null,
+            existingRegions: [],
+            overlay: null,
+            ctx: null,
+            drawState: null,
+            imageElement: null,
+            highlightedSelectionId: null,
+            assetCard: null,
+        };
+
+        if (!unitSupportsRegionDrawing(unit)) {
+            return state;
+        }
+
+        var toolbar = document.getElementById("detail-tools");
+        if (!toolbar) {
+            return state;
+        }
+        toolbar.hidden = false;
+
+        var card = assetsContainer.querySelector(".asset-card");
+        var image = card ? card.querySelector("img") : null;
+        if (!card || !image) {
+            return state;
+        }
+
+        card.classList.add("has-region-overlay");
+        state.imageElement = image;
+        state.assetCard = card;
+        state.overlay = document.createElement("canvas");
+        state.overlay.className = "region-overlay";
+        card.appendChild(state.overlay);
+
+        function syncCanvasSize() {
+            var natW = image.naturalWidth || image.width;
+            var natH = image.naturalHeight || image.height;
+            if (!natW || !natH) {
+                return;
+            }
+            state.overlay.width = natW;
+            state.overlay.height = natH;
+            state.overlay.style.width = image.clientWidth + "px";
+            state.overlay.style.height = image.clientHeight + "px";
+            state.ctx = state.overlay.getContext("2d");
+            redraw(state);
+        }
+
+        if (image.complete && image.naturalWidth > 0) {
+            syncCanvasSize();
+        } else {
+            image.addEventListener("load", syncCanvasSize);
+        }
+        window.addEventListener("resize", syncCanvasSize);
+
+        state.overlay.addEventListener("mousedown", function (event) { onMouseDown(state, event); });
+        state.overlay.addEventListener("mousemove", function (event) { onMouseMove(state, event); });
+        state.overlay.addEventListener("mouseup", function (event) { onMouseUp(state, event); });
+        state.overlay.addEventListener("mouseleave", function (event) { onMouseUp(state, event); });
+
+        // Card-level hover drives the bidirectional hover-highlight (qh9). The
+        // overlay has pointer-events:none in the OFF tool, so events arrive
+        // on the card. In drawing modes the overlay captures events first;
+        // we early-out below so drawing isn't disturbed.
+        card.addEventListener("mousemove", function (event) { onCardHover(state, event); });
+        card.addEventListener("mouseleave", function () { onCardLeave(state); });
+
+        Array.prototype.slice.call(toolbar.querySelectorAll(".btn-tool")).forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                setActiveTool(state, btn.getAttribute("data-tool"));
+            });
+        });
+
+        var cancel = document.getElementById("cancel-pending-region");
+        if (cancel) {
+            cancel.addEventListener("click", function () {
+                state.pendingRegion = null;
+                hidePendingIndicator();
+                redraw(state);
+            });
+        }
+
+        return state;
+    }
+
+    function setActiveTool(state, tool) {
+        state.activeTool = tool;
+        var toolbar = document.getElementById("detail-tools");
+        var toolButtons = toolbar ? toolbar.querySelectorAll(".btn-tool") : [];
+        Array.prototype.slice.call(toolButtons).forEach(function (btn) {
+            var isActive = btn.getAttribute("data-tool") === tool;
+            btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+            btn.setAttribute("aria-checked", isActive ? "true" : "false");
+        });
+        if (!state.overlay) {
+            return;
+        }
+        ALL_TOOL_OVERLAY_CLASSES.forEach(function (cls) {
+            state.overlay.classList.remove(cls);
+        });
+        var nextClass = TOOL_OVERLAY_CLASS[tool];
+        if (nextClass) {
+            state.overlay.classList.add(nextClass);
+        }
+    }
+
+    function clampUnit(value) {
+        if (value < 0) return 0;
+        if (value > 1) return 1;
+        return value;
+    }
+
+    function pointFromEvent(state, event) {
+        var rect = state.overlay.getBoundingClientRect();
+        return [
+            clampUnit((event.clientX - rect.left) / rect.width),
+            clampUnit((event.clientY - rect.top) / rect.height),
+        ];
+    }
+
+    function pointFromImageEvent(state, event) {
+        if (!state.imageElement) {
+            return null;
+        }
+        var rect = state.imageElement.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) {
+            return null;
+        }
+        var x = (event.clientX - rect.left) / rect.width;
+        var y = (event.clientY - rect.top) / rect.height;
+        if (x < 0 || x > 1 || y < 0 || y > 1) {
+            return null;
+        }
+        return [x, y];
+    }
+
+    function onCardHover(state, event) {
+        if (state.activeTool !== TOOL_OFF) {
+            // Drawing modes own the cursor and the overlay events; don't
+            // interfere with an in-progress draw.
+            return;
+        }
+        var p = pointFromImageEvent(state, event);
+        if (!p) {
+            onCardLeave(state);
+            return;
+        }
+        var rect = state.imageElement.getBoundingClientRect();
+        var pathTol = PATH_HIT_PAD_PIXELS / Math.max(rect.width, rect.height, 1);
+        var hit = hitTestRegions(p[0], p[1], state.existingRegions, pathTol);
+        if (hit) {
+            if (state.assetCard) {
+                state.assetCard.classList.add("region-hover-active");
+            }
+            setHighlightedSelection(state, hit.selection_id || null);
+        } else {
+            if (state.assetCard) {
+                state.assetCard.classList.remove("region-hover-active");
+            }
+            setHighlightedSelection(state, null);
+        }
+    }
+
+    function onCardLeave(state) {
+        if (state.assetCard) {
+            state.assetCard.classList.remove("region-hover-active");
+        }
+        setHighlightedSelection(state, null);
+    }
+
+    function onMouseDown(state, event) {
+        if (state.activeTool === TOOL_OFF) {
+            return;
+        }
+        event.preventDefault();
+        var p = pointFromEvent(state, event);
+        if (state.activeTool === TOOL_RECT) {
+            state.drawState = { type: TOOL_RECT, origin: p, current: p };
+        } else if (state.activeTool === TOOL_ELLIPSE) {
+            state.drawState = { type: TOOL_ELLIPSE, origin: p, current: p };
+        } else {
+            state.drawState = { type: TOOL_PATH, points: [p] };
+        }
+        renderDrawState(state);
+    }
+
+    function onMouseMove(state, event) {
+        if (!state.drawState) {
+            return;
+        }
+        var p = pointFromEvent(state, event);
+        if (state.drawState.type === TOOL_RECT || state.drawState.type === TOOL_ELLIPSE) {
+            state.drawState.current = p;
+        } else {
+            state.drawState.points.push(p);
+        }
+        renderDrawState(state);
+    }
+
+    function onMouseUp(state, _event) {
+        if (!state.drawState) {
+            return;
+        }
+        commitDrawState(state);
+        state.drawState = null;
+    }
+
+    function renderDrawState(state) {
+        if (!state.drawState) {
+            redraw(state);
+            return;
+        }
+        redraw(state);
+        var preview = previewFromDrawState(state.drawState);
+        if (preview) {
+            paintRegion(state, preview, REGION_PENDING_DASH);
+        }
+    }
+
+    function previewFromDrawState(drawState) {
+        if (drawState.type === TOOL_RECT) {
+            var x = Math.min(drawState.origin[0], drawState.current[0]);
+            var y = Math.min(drawState.origin[1], drawState.current[1]);
+            var w = Math.abs(drawState.current[0] - drawState.origin[0]);
+            var h = Math.abs(drawState.current[1] - drawState.origin[1]);
+            return { type: TOOL_RECT, x: x, y: y, w: w, h: h };
+        }
+        if (drawState.type === TOOL_ELLIPSE) {
+            var cx = (drawState.origin[0] + drawState.current[0]) / 2;
+            var cy = (drawState.origin[1] + drawState.current[1]) / 2;
+            var rx = Math.abs(drawState.current[0] - drawState.origin[0]) / 2;
+            var ry = Math.abs(drawState.current[1] - drawState.origin[1]) / 2;
+            return { type: TOOL_ELLIPSE, cx: cx, cy: cy, rx: rx, ry: ry };
+        }
+        return { type: TOOL_PATH, points: drawState.points.slice() };
+    }
+
+    function commitDrawState(state) {
+        var drawState = state.drawState;
+        if (!drawState) {
+            return;
+        }
+        if (drawState.type === TOOL_RECT) {
+            var preview = previewFromDrawState(drawState);
+            if (preview.w < MIN_RECT_NORMALIZED_SIZE || preview.h < MIN_RECT_NORMALIZED_SIZE) {
+                return;
+            }
+            state.pendingRegion = preview;
+        } else if (drawState.type === TOOL_ELLIPSE) {
+            var ellipsePreview = previewFromDrawState(drawState);
+            if (
+                ellipsePreview.rx < MIN_ELLIPSE_NORMALIZED_RADIUS ||
+                ellipsePreview.ry < MIN_ELLIPSE_NORMALIZED_RADIUS
+            ) {
+                return;
+            }
+            state.pendingRegion = ellipsePreview;
+        } else {
+            if (drawState.points.length < MIN_PATH_POINT_COUNT) {
+                return;
+            }
+            state.pendingRegion = { type: TOOL_PATH, points: drawState.points.slice() };
+        }
+        showPendingIndicator(state.pendingRegion);
+        redraw(state);
+    }
+
+    function redraw(state) {
+        if (!state.ctx || !state.overlay) {
+            return;
+        }
+        state.ctx.clearRect(0, 0, state.overlay.width, state.overlay.height);
+        var highlightId = state.highlightedSelectionId;
+        state.existingRegions.forEach(function (region) {
+            var isHighlighted = highlightId != null &&
+                region.selection_id === highlightId;
+            paintRegion(state, region, REGION_COMMITTED_DASH, isHighlighted);
+        });
+        if (state.pendingRegion) {
+            paintRegion(state, state.pendingRegion, REGION_PENDING_DASH, true);
+        }
+    }
+
+    function paintRegion(state, region, dash, isEmphasized) {
+        var ctx = state.ctx;
+        var w = state.overlay.width;
+        var h = state.overlay.height;
+        var isCommitted = dash === REGION_COMMITTED_DASH;
+        var dimmed = isCommitted && !isEmphasized;
+        ctx.save();
+        ctx.lineWidth = isEmphasized && isCommitted
+            ? REGION_HIGHLIGHT_LINE_WIDTH
+            : REGION_DEFAULT_LINE_WIDTH;
+        ctx.strokeStyle = dimmed ? REGION_LINE_COLOR_DIM : REGION_LINE_COLOR;
+        ctx.fillStyle = dimmed ? REGION_FILL_COLOR_DIM : REGION_FILL_COLOR;
+        ctx.setLineDash(dash);
+        if (region.type === TOOL_RECT) {
+            ctx.beginPath();
+            ctx.rect(region.x * w, region.y * h, region.w * w, region.h * h);
+            ctx.fill();
+            ctx.stroke();
+        } else if (region.type === TOOL_ELLIPSE) {
+            ctx.beginPath();
+            ctx.ellipse(
+                region.cx * w,
+                region.cy * h,
+                region.rx * w,
+                region.ry * h,
+                0,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.stroke();
+        } else if (region.type === TOOL_PATH) {
+            var points = region.points || [];
+            if (points.length > 0) {
+                ctx.beginPath();
+                ctx.moveTo(points[0][0] * w, points[0][1] * h);
+                for (var i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i][0] * w, points[i][1] * h);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+        }
+        ctx.restore();
+
+        if (dash === REGION_COMMITTED_DASH && region.selection_id) {
+            var anchor = selectionBadgeAnchor(region, w, h);
+            if (anchor) {
+                paintSelectionBadge(state, anchor[0], anchor[1], region.selection_id);
+            }
+        }
+    }
+
+    function selectionBadgeAnchor(region, w, h) {
+        if (region.type === TOOL_RECT) {
+            return [region.x * w, region.y * h];
+        }
+        if (region.type === TOOL_ELLIPSE) {
+            // Anchor at the top-left of the ellipse's bounding box so the badge
+            // sits in the same place as it would for an enclosing rect.
+            return [(region.cx - region.rx) * w, (region.cy - region.ry) * h];
+        }
+        if (region.type === TOOL_PATH && region.points && region.points.length) {
+            return [region.points[0][0] * w, region.points[0][1] * h];
+        }
+        return null;
+    }
+
+    function selectionBadgeScale(state) {
+        if (!state.imageElement || !state.imageElement.clientWidth) {
+            return 1;
+        }
+        var ratio = state.overlay.width / state.imageElement.clientWidth;
+        return ratio > 1 ? ratio : 1;
+    }
+
+    function paintSelectionBadge(state, anchorX, anchorY, selectionId) {
+        var ctx = state.ctx;
+        var scale = selectionBadgeScale(state);
+        var fontPx = SELECTION_BADGE_FONT_PX * scale;
+        var paddingX = SELECTION_BADGE_PADDING_X * scale;
+        var paddingY = SELECTION_BADGE_PADDING_Y * scale;
+        var radius = SELECTION_BADGE_RADIUS * scale;
+        var offset = SELECTION_BADGE_OFFSET * scale;
+        var label = String(selectionId);
+
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.font = "600 " + fontPx + "px sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+        var textWidth = ctx.measureText(label).width;
+        var badgeWidth = textWidth + paddingX * 2;
+        var badgeHeight = fontPx + paddingY * 2;
+
+        var maxX = state.overlay.width - badgeWidth;
+        var maxY = state.overlay.height - badgeHeight;
+        var bx = anchorX + offset;
+        var by = anchorY + offset;
+        if (bx > maxX) { bx = maxX; }
+        if (by > maxY) { by = maxY; }
+        if (bx < 0) { bx = 0; }
+        if (by < 0) { by = 0; }
+
+        ctx.fillStyle = SELECTION_BADGE_FILL;
+        ctx.strokeStyle = SELECTION_BADGE_STROKE;
+        ctx.lineWidth = Math.max(1, scale);
+        traceRoundedRect(ctx, bx, by, badgeWidth, badgeHeight, radius);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = SELECTION_BADGE_TEXT_COLOR;
+        ctx.fillText(label, bx + paddingX, by + badgeHeight / 2);
+        ctx.restore();
+    }
+
+    function traceRoundedRect(ctx, x, y, w, h, r) {
+        var radius = Math.min(r, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.arcTo(x + w, y, x + w, y + h, radius);
+        ctx.arcTo(x + w, y + h, x, y + h, radius);
+        ctx.arcTo(x, y + h, x, y, radius);
+        ctx.arcTo(x, y, x + w, y, radius);
+        ctx.closePath();
+    }
+
+    function showPendingIndicator(region) {
+        var indicator = document.getElementById("pending-region-indicator");
+        var typeLabel = document.getElementById("pending-region-type");
+        if (indicator) {
+            indicator.hidden = false;
+        }
+        if (typeLabel && region) {
+            typeLabel.textContent = region.type;
+        }
+    }
+
+    function hidePendingIndicator() {
+        var indicator = document.getElementById("pending-region-indicator");
+        if (indicator) {
+            indicator.hidden = true;
+        }
+    }
+
+    function cycleActiveTool() {
+        var pressed = document.querySelector(".btn-tool[aria-pressed='true']");
+        var current = pressed ? pressed.getAttribute("data-tool") : TOOL_OFF;
+        var idx = TOOL_ORDER.indexOf(current);
+        var next = TOOL_ORDER[(idx + 1) % TOOL_ORDER.length];
+        var nextButton = document.querySelector(".btn-tool[data-tool='" + next + "']");
+        if (nextButton) {
+            nextButton.click();
+        }
+    }
+
     function initDetail() {
         var assetsContainer = document.getElementById("unit-assets");
         var metadataContainer = document.getElementById("unit-metadata");
@@ -1086,6 +1753,17 @@
         });
 
         initVizdiffDetailModes(currentUnit);
+        // The detail legend hardcodes a 'd cycle tool' entry server-side so
+        // we can toggle it here using the same predicate that gates the 'd'
+        // keypress and the region-drawing setup. This avoids advertising the
+        // shortcut on units (multi-asset, ANSI, non-image) where pressing
+        // 'd' is a no-op.
+        var regionLegendEntry = document.getElementById("legend-region-drawing");
+        if (regionLegendEntry) {
+            regionLegendEntry.hidden = !unitSupportsRegionDrawing(currentUnit);
+        }
+        var regionState = setupRegionDrawing(currentUnit, assetsContainer);
+        currentRegionState = regionState;
 
         previousSlot.appendChild(
             createNavigationButton({
@@ -1119,6 +1797,7 @@
         var commentInput = document.getElementById("comment-input");
         var commentSubmit = commentForm.querySelector("button[type='submit']");
         var commentsList = document.getElementById("comments-list");
+        var selectionIdCounter = 0;
         var commentStatus = document.createElement("div");
         commentStatus.className = "comment-status";
         commentForm.insertAdjacentElement("afterend", commentStatus);
@@ -1145,15 +1824,32 @@
                 return;
             }
 
+            var submittedRegion = regionState.pendingRegion || null;
+            var payload = { unit_id: currentUnit.id, body: body };
+            if (submittedRegion) {
+                payload.region = submittedRegion;
+            }
+
             fetchJson("/api/comments", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ unit_id: currentUnit.id, body: body }),
+                body: JSON.stringify(payload),
             })
                 .then(function (comment) {
                     commentInput.value = "";
                     commentStatus.textContent = "";
                     appendComment(comment);
+                    if (submittedRegion) {
+                        if (comment.region && comment.region.selection_id) {
+                            submittedRegion.selection_id = comment.region.selection_id;
+                        }
+                        regionState.existingRegions.push(submittedRegion);
+                        if (regionState.pendingRegion === submittedRegion) {
+                            regionState.pendingRegion = null;
+                            hidePendingIndicator();
+                        }
+                        redraw(regionState);
+                    }
                 })
                 .catch(function () {
                     showServerDown("Bugshot server is unreachable. This comment was not saved.");
@@ -1166,7 +1862,12 @@
                 .then(function (comments) {
                     commentsList.textContent = "";
                     commentStatus.textContent = "";
+                    selectionIdCounter = 0;
                     comments.forEach(appendComment);
+                    regionState.existingRegions = comments
+                        .map(function (c) { return c.region; })
+                        .filter(function (r) { return r != null; });
+                    redraw(regionState);
                 })
                 .catch(function () {
                     showServerDown("Bugshot server is unreachable. Existing comments could not be loaded.");
@@ -1178,6 +1879,30 @@
             var item = document.createElement("div");
             item.className = "comment-item";
             item.dataset.id = comment.id;
+
+            var badge = document.createElement("span");
+            badge.className = "region-badge";
+            if (comment.region) {
+                if (!comment.region.selection_id) {
+                    selectionIdCounter += 1;
+                    comment.region.selection_id = selectionIdCounter;
+                }
+                var selectionId = comment.region.selection_id;
+                badge.textContent = "Selection " + selectionId;
+                item.dataset.selectionId = selectionId;
+                // Bidirectional hover-highlight (qh9): hovering the comment
+                // emphasizes the matching region on the canvas. The reverse
+                // direction (canvas → comment) is wired in onCardHover.
+                item.addEventListener("mouseenter", function () {
+                    setHighlightedSelection(regionState, selectionId);
+                });
+                item.addEventListener("mouseleave", function () {
+                    setHighlightedSelection(regionState, null);
+                });
+            } else {
+                badge.textContent = "⬚ image";
+            }
+            item.appendChild(badge);
 
             var bodyElement = document.createElement("span");
             bodyElement.className = "comment-body";
