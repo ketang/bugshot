@@ -2,7 +2,7 @@
 
 ## Overview
 
-Two new skills in the bugshot plugin family for visual regression review:
+Two new skills in the bugshot plugin family for visual change review:
 
 - **`bento:vizline`** — captures a *baseline* set of screenshots at a base ref and stores it inside a feature worktree.
 - **`bento:vizdiff`** — captures HEAD screenshots, compares against the baseline, and opens a diff-aware gallery for human review. Comments (with optional spatial regions) flow out as issue drafts in the same shape bugshot already uses.

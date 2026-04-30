@@ -1,6 +1,6 @@
 ---
 name: vizline
-description: Capture a baseline image set at a base ref into a feature worktree
+description: Capture baseline screenshots so users can examine visual changes, whether intended or accidental
 arguments:
   - name: feature_worktree
     description: Path to the feature worktree where the baseline should be written
@@ -16,7 +16,10 @@ later compares HEAD against.
 ## When to use
 
 Before HEAD has diverged from the base ref in a way that affects rendered
-output. Typically called once at the start of feature work; refresh on rebase.
+output. Vizline is not primarily a regression detector; it prepares a baseline
+for user examination of later visual changes, including changes that are
+intended, accidental, or still undecided. Typically called once at the start of
+feature work; refresh on rebase.
 
 ## Project contract
 
