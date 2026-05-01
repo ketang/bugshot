@@ -1571,6 +1571,7 @@
         }
         showPendingIndicator(state.pendingRegion);
         redraw(state);
+        focusCommentInput();
     }
 
     function redraw(state) {
