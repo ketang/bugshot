@@ -139,6 +139,12 @@
             return;
         }
 
+        if (event.key === "Escape" && currentRegionState && currentRegionState.replaceTarget) {
+            cancelRegionReplace(currentRegionState);
+            event.preventDefault();
+            return;
+        }
+
         var activeElement = document.activeElement;
         var isTyping = activeElement &&
             (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
@@ -1309,6 +1315,7 @@
             imageElement: null,
             highlightedSelectionId: null,
             assetCard: null,
+            replaceTarget: null,
         };
 
         if (!unitSupportsRegionDrawing(unit)) {
@@ -1385,6 +1392,13 @@
                 state.pendingRegion = null;
                 hidePendingIndicator();
                 redraw(state);
+            });
+        }
+
+        var cancelReplace = document.getElementById("cancel-replace-region");
+        if (cancelReplace) {
+            cancelReplace.addEventListener("click", function () {
+                cancelRegionReplace(state);
             });
         }
 
@@ -1548,30 +1562,120 @@
         if (!drawState) {
             return;
         }
+        var newRegion = buildCommittedRegion(drawState);
+        if (!newRegion) {
+            return;
+        }
+        if (state.replaceTarget) {
+            applyRegionReplace(state, newRegion);
+            return;
+        }
+        state.pendingRegion = newRegion;
+        showPendingIndicator(state.pendingRegion);
+        redraw(state);
+        focusCommentInput();
+    }
+
+    function buildCommittedRegion(drawState) {
         if (drawState.type === TOOL_RECT) {
             var preview = previewFromDrawState(drawState);
             if (preview.w < MIN_RECT_NORMALIZED_SIZE || preview.h < MIN_RECT_NORMALIZED_SIZE) {
-                return;
+                return null;
             }
-            state.pendingRegion = preview;
-        } else if (drawState.type === TOOL_ELLIPSE) {
+            return preview;
+        }
+        if (drawState.type === TOOL_ELLIPSE) {
             var ellipsePreview = previewFromDrawState(drawState);
             if (
                 ellipsePreview.rx < MIN_ELLIPSE_NORMALIZED_RADIUS ||
                 ellipsePreview.ry < MIN_ELLIPSE_NORMALIZED_RADIUS
             ) {
-                return;
+                return null;
             }
-            state.pendingRegion = ellipsePreview;
-        } else {
-            if (drawState.points.length < MIN_PATH_POINT_COUNT) {
-                return;
-            }
-            state.pendingRegion = { type: TOOL_PATH, points: drawState.points.slice() };
+            return ellipsePreview;
         }
-        showPendingIndicator(state.pendingRegion);
+        if (drawState.points.length < MIN_PATH_POINT_COUNT) {
+            return null;
+        }
+        return { type: TOOL_PATH, points: drawState.points.slice() };
+    }
+
+    function applyRegionReplace(state, newRegion) {
+        var target = state.replaceTarget;
+        if (!target) {
+            return;
+        }
+        var selectionId = target.comment.region && target.comment.region.selection_id;
+        if (selectionId != null) {
+            newRegion.selection_id = selectionId;
+        }
+        fetchJson("/api/comments/" + target.comment.id, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: target.comment.body, region: newRegion }),
+        })
+            .then(function () {
+                var oldRegion = target.comment.region;
+                target.comment.region = newRegion;
+                var idx = state.existingRegions.indexOf(oldRegion);
+                if (idx !== -1) {
+                    state.existingRegions[idx] = newRegion;
+                } else {
+                    state.existingRegions.push(newRegion);
+                }
+                state.replaceTarget = null;
+                hideReplaceIndicator();
+                redraw(state);
+            })
+            .catch(function () {
+                showServerDown("Bugshot server is unreachable. Region was not replaced.");
+            });
+    }
+
+    function beginRegionReplace(state, comment) {
+        state.pendingRegion = null;
+        hidePendingIndicator();
+        state.replaceTarget = { comment: comment };
+        if (state.activeTool === TOOL_OFF) {
+            setActiveTool(state, TOOL_RECT);
+        }
+        showReplaceIndicator(comment);
         redraw(state);
-        focusCommentInput();
+    }
+
+    function cancelRegionReplace(state) {
+        if (!state.replaceTarget) {
+            return;
+        }
+        state.replaceTarget = null;
+        hideReplaceIndicator();
+        redraw(state);
+    }
+
+    function removeRegionFromState(state, region) {
+        var idx = state.existingRegions.indexOf(region);
+        if (idx !== -1) {
+            state.existingRegions.splice(idx, 1);
+        }
+        redraw(state);
+    }
+
+    function showReplaceIndicator(comment) {
+        var indicator = document.getElementById("replace-region-indicator");
+        var label = document.getElementById("replace-region-target");
+        if (indicator) {
+            indicator.hidden = false;
+        }
+        if (label && comment.region && comment.region.selection_id != null) {
+            label.textContent = "Selection " + comment.region.selection_id;
+        }
+    }
+
+    function hideReplaceIndicator() {
+        var indicator = document.getElementById("replace-region-indicator");
+        if (indicator) {
+            indicator.hidden = true;
+        }
     }
 
     function redraw(state) {
@@ -1960,6 +2064,46 @@
 
             actions.appendChild(editButton);
             actions.appendChild(deleteButton);
+
+            if (comment.region) {
+                var modifyRegionButton = document.createElement("button");
+                modifyRegionButton.textContent = "modify region";
+                modifyRegionButton.addEventListener("click", function () {
+                    beginRegionReplace(regionState, comment);
+                });
+
+                var removeRegionButton = document.createElement("button");
+                removeRegionButton.textContent = "remove region";
+                removeRegionButton.addEventListener("click", function () {
+                    if (!isServerReachable) {
+                        showServerDown("Bugshot server is unreachable. Region was not removed.");
+                        return;
+                    }
+                    var oldRegion = comment.region;
+                    fetchJson("/api/comments/" + comment.id, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ body: comment.body, region: null }),
+                    })
+                        .then(function () {
+                            commentStatus.textContent = "";
+                            removeRegionFromState(regionState, oldRegion);
+                            comment.region = null;
+                            badge.textContent = "⬚ image";
+                            delete item.dataset.selectionId;
+                            modifyRegionButton.remove();
+                            removeRegionButton.remove();
+                        })
+                        .catch(function () {
+                            showServerDown("Bugshot server is unreachable. Region was not removed.");
+                            commentStatus.textContent = "Region was not removed.";
+                        });
+                });
+
+                actions.appendChild(modifyRegionButton);
+                actions.appendChild(removeRegionButton);
+            }
+
             item.appendChild(bodyElement);
             item.appendChild(actions);
             commentsList.appendChild(item);
