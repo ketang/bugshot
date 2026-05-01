@@ -1344,6 +1344,12 @@
             state.overlay.height = natH;
             state.overlay.style.width = image.clientWidth + "px";
             state.overlay.style.height = image.clientHeight + "px";
+            // The overlay is position:absolute inside .asset-card. The card has
+            // padding and a title row above the image, so inset:0 alone leaves
+            // the overlay misaligned — extending into the title at top and
+            // falling short of the image bottom. Pin it to the image's box.
+            state.overlay.style.left = image.offsetLeft + "px";
+            state.overlay.style.top = image.offsetTop + "px";
             state.ctx = state.overlay.getContext("2d");
             redraw(state);
         }
