@@ -438,7 +438,15 @@ header h1 {
     word-break: break-word;
 }
 
-.asset-card img,
+.asset-card img {
+    display: block;
+    max-width: none;
+}
+
+.asset-card {
+    overflow: auto;
+}
+
 .svg-rendered img,
 .svg-rendered .svg-asset {
     width: 100%;
