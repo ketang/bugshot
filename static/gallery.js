@@ -2025,23 +2025,7 @@
             var editButton = document.createElement("button");
             editButton.textContent = "edit";
             editButton.addEventListener("click", function () {
-                var nextBody = prompt("Edit comment:", comment.body);
-                if (nextBody !== null && nextBody.trim()) {
-                    fetchJson("/api/comments/" + comment.id, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ body: nextBody.trim() }),
-                    })
-                        .then(function (updated) {
-                            commentStatus.textContent = "";
-                            bodyElement.textContent = updated.body;
-                            comment.body = updated.body;
-                        })
-                        .catch(function () {
-                            showServerDown("Bugshot server is unreachable. Comment edit was not saved.");
-                            commentStatus.textContent = "Comment edit was not saved.";
-                        });
-                }
+                beginInlineEdit(item, bodyElement, actions, comment, commentStatus);
             });
 
             var deleteButton = document.createElement("button");
@@ -2436,5 +2420,83 @@
         if (input) {
             input.focus();
         }
+    }
+
+    function beginInlineEdit(item, bodyElement, actions, comment, commentStatus) {
+        if (item.classList.contains("is-editing")) {
+            return;
+        }
+        item.classList.add("is-editing");
+
+        var originalBody = comment.body;
+        var editor = document.createElement("textarea");
+        editor.className = "comment-edit-input";
+        editor.value = originalBody;
+        editor.rows = Math.min(6, Math.max(1, originalBody.split("\n").length));
+
+        var editActions = document.createElement("span");
+        editActions.className = "comment-edit-actions";
+
+        var saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.textContent = "save";
+
+        var cancelButton = document.createElement("button");
+        cancelButton.type = "button";
+        cancelButton.textContent = "cancel";
+
+        editActions.appendChild(saveButton);
+        editActions.appendChild(cancelButton);
+
+        bodyElement.replaceWith(editor);
+        actions.replaceWith(editActions);
+
+        editor.focus();
+        editor.setSelectionRange(editor.value.length, editor.value.length);
+
+        function restore() {
+            editor.replaceWith(bodyElement);
+            editActions.replaceWith(actions);
+            item.classList.remove("is-editing");
+        }
+
+        function save() {
+            var nextBody = editor.value.trim();
+            if (!nextBody || nextBody === originalBody) {
+                restore();
+                return;
+            }
+            saveButton.disabled = true;
+            cancelButton.disabled = true;
+            fetchJson("/api/comments/" + comment.id, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ body: nextBody }),
+            })
+                .then(function (updated) {
+                    commentStatus.textContent = "";
+                    bodyElement.textContent = updated.body;
+                    comment.body = updated.body;
+                    restore();
+                })
+                .catch(function () {
+                    showServerDown("Bugshot server is unreachable. Comment edit was not saved.");
+                    commentStatus.textContent = "Comment edit was not saved.";
+                    saveButton.disabled = false;
+                    cancelButton.disabled = false;
+                });
+        }
+
+        saveButton.addEventListener("click", save);
+        cancelButton.addEventListener("click", restore);
+        editor.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                restore();
+            } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                save();
+            }
+        });
     }
 })();
