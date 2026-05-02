@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+
+import argparse
+import json
+import os
+import shutil
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional
+
+
+PLUGIN_NAME = "bugshot"
+MARKETPLACE_NAME = "bugshot"
+DISPLAY_NAME = "Bugshot"
+CATEGORY = "Coding"
+PLUGIN_SOURCE_PATH = "./plugins/bugshot"
+DEFAULT_AUTHENTICATION_POLICY = "ON_INSTALL"
+DEFAULT_INSTALLATION_POLICY = "INSTALLED_BY_DEFAULT"
+INSTALLATION_POLICIES = ("AVAILABLE", "INSTALLED_BY_DEFAULT", "NOT_AVAILABLE")
+AUTHENTICATION_POLICIES = ("ON_INSTALL", "ON_USE")
+PAYLOAD_PATHS = (
+    ".codex-plugin",
+    "skills",
+    "assets",
+    "plugin-version.json",
+    "INSTALL.md",
+)
+IGNORED_COPY_NAMES = (
+    "__pycache__",
+    ".DS_Store",
+    ".pytest_cache",
+)
+
+
+def repository_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def default_codex_home() -> Path:
+    configured_home = os.environ.get("CODEX_HOME")
+    if configured_home:
+        return Path(configured_home).expanduser()
+    return Path.home() / ".codex"
+
+
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Install the Bugshot Codex plugin into a local Codex marketplace."
+    )
+    parser.add_argument(
+        "--source",
+        type=Path,
+        default=repository_root(),
+        help="Bugshot checkout to install from (default: this repository).",
+    )
+    parser.add_argument(
+        "--codex-home",
+        type=Path,
+        default=default_codex_home(),
+        help="Codex home directory to register against (default: $CODEX_HOME or ~/.codex).",
+    )
+    parser.add_argument(
+        "--marketplace-root",
+        type=Path,
+        help="Local marketplace root to write (default: <codex-home>/marketplaces/bugshot).",
+    )
+    parser.add_argument(
+        "--codex",
+        default=os.environ.get("CODEX", "codex"),
+        help="Codex executable to use for marketplace registration (default: codex).",
+    )
+    parser.add_argument(
+        "--install-policy",
+        choices=INSTALLATION_POLICIES,
+        default=DEFAULT_INSTALLATION_POLICY,
+        help="Codex marketplace installation policy for Bugshot.",
+    )
+    parser.add_argument(
+        "--authentication-policy",
+        choices=AUTHENTICATION_POLICIES,
+        default=DEFAULT_AUTHENTICATION_POLICY,
+        help="Codex marketplace authentication policy for Bugshot.",
+    )
+    parser.add_argument(
+        "--skip-build",
+        action="store_true",
+        help="Do not run scripts/build-plugin before copying plugin files.",
+    )
+    parser.add_argument(
+        "--skip-register",
+        action="store_true",
+        help="Write the local marketplace without running codex plugin marketplace add.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the planned installation without writing files or registering with Codex.",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Print each major installation step.",
+    )
+    return parser.parse_args(argv)
+
+
+def resolved(path: Path) -> Path:
+    return path.expanduser().resolve()
+
+
+def marketplace_root_for(args: argparse.Namespace) -> Path:
+    if args.marketplace_root is not None:
+        return resolved(args.marketplace_root)
+    codex_home = resolved(args.codex_home)
+    return codex_home / "marketplaces" / PLUGIN_NAME
+
+
+def validate_source(source: Path) -> None:
+    if not source.exists():
+        raise SystemExit(f"Source path does not exist: {source}")
+    if not source.is_dir():
+        raise SystemExit(f"Source path is not a directory: {source}")
+
+    missing_paths = []
+    for relative_path in PAYLOAD_PATHS:
+        path = source / relative_path
+        if not path.exists():
+            missing_paths.append(relative_path)
+    if missing_paths:
+        missing = ", ".join(missing_paths)
+        raise SystemExit(f"Missing required plugin payload path(s): {missing}")
+
+    manifest_path = source / ".codex-plugin" / "plugin.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{manifest_path} is not valid JSON: {exc}") from exc
+
+    plugin_name = manifest.get("name")
+    if plugin_name != PLUGIN_NAME:
+        message = f"{manifest_path} must declare name {PLUGIN_NAME!r}, got {plugin_name!r}"
+        raise SystemExit(message)
+
+
+def run_command(
+    command: List[str],
+    cwd: Optional[Path] = None,
+    env: Optional[Dict[str, str]] = None,
+    verbose: bool = False,
+) -> None:
+    if verbose:
+        rendered_command = shlex.join(command)
+        print(f"$ {rendered_command}")
+    try:
+        subprocess.run(command, cwd=cwd, env=env, check=True)
+    except FileNotFoundError as exc:
+        executable = command[0]
+        raise SystemExit(f"Could not find executable: {executable}") from exc
+    except subprocess.CalledProcessError as exc:
+        rendered_command = shlex.join(command)
+        raise SystemExit(f"Command failed with exit code {exc.returncode}: {rendered_command}") from exc
+
+
+def run_build_plugin(source: Path, verbose: bool) -> None:
+    build_script = source / "scripts" / "build-plugin"
+    if not build_script.exists():
+        raise SystemExit(f"Build script does not exist: {build_script}")
+    command = [sys.executable, str(build_script)]
+    run_command(command, cwd=source, verbose=verbose)
+
+
+def remove_existing(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+        return
+    if path.exists():
+        shutil.rmtree(path)
+
+
+def copy_payload(source: Path, target: Path, verbose: bool) -> None:
+    target.mkdir(parents=True)
+    ignore = shutil.ignore_patterns(*IGNORED_COPY_NAMES)
+    for relative_path in PAYLOAD_PATHS:
+        source_path = source / relative_path
+        target_path = target / relative_path
+        if verbose:
+            print(f"Copying {relative_path}")
+        if source_path.is_dir():
+            shutil.copytree(source_path, target_path, ignore=ignore)
+        else:
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+
+
+def install_payload(source: Path, marketplace_root: Path, verbose: bool) -> Path:
+    plugins_dir = marketplace_root / "plugins"
+    plugin_target = plugins_dir / PLUGIN_NAME
+    temporary_target = plugins_dir / f".{PLUGIN_NAME}.installing"
+
+    plugins_dir.mkdir(parents=True, exist_ok=True)
+    remove_existing(temporary_target)
+    copy_payload(source, temporary_target, verbose=verbose)
+    remove_existing(plugin_target)
+    temporary_target.rename(plugin_target)
+    return plugin_target
+
+
+def marketplace_entry(args: argparse.Namespace) -> dict:
+    return {
+        "name": PLUGIN_NAME,
+        "source": {
+            "source": "local",
+            "path": PLUGIN_SOURCE_PATH,
+        },
+        "policy": {
+            "installation": args.install_policy,
+            "authentication": args.authentication_policy,
+        },
+        "category": CATEGORY,
+    }
+
+
+def initial_marketplace_manifest() -> dict:
+    return {
+        "name": MARKETPLACE_NAME,
+        "interface": {
+            "displayName": DISPLAY_NAME,
+        },
+        "plugins": [],
+    }
+
+
+def read_marketplace_manifest(manifest_path: Path) -> dict:
+    if not manifest_path.exists():
+        return initial_marketplace_manifest()
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"{manifest_path} is not valid JSON: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise SystemExit(f"{manifest_path} must contain a JSON object")
+    return manifest
+
+
+def write_marketplace_manifest(
+    marketplace_root: Path,
+    args: argparse.Namespace,
+    verbose: bool,
+) -> Path:
+    manifest_path = marketplace_root / ".agents" / "plugins" / "marketplace.json"
+    manifest = read_marketplace_manifest(manifest_path)
+    manifest.setdefault("name", MARKETPLACE_NAME)
+    interface = manifest.setdefault("interface", {})
+    if not isinstance(interface, dict):
+        raise SystemExit("marketplace.json field 'interface' must be an object")
+    interface.setdefault("displayName", DISPLAY_NAME)
+
+    plugins = manifest.setdefault("plugins", [])
+    if not isinstance(plugins, list):
+        raise SystemExit("marketplace.json field 'plugins' must be an array")
+
+    entry = marketplace_entry(args)
+    replacement_index = next(
+        (
+            index
+            for index, plugin in enumerate(plugins)
+            if plugin.get("name") == PLUGIN_NAME
+        ),
+        None,
+    )
+    if replacement_index is None:
+        plugins.append(entry)
+    else:
+        plugins[replacement_index] = entry
+
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    if verbose:
+        print(f"Wrote {manifest_path}")
+    return manifest_path
+
+
+def register_marketplace(
+    codex: str,
+    codex_home: Path,
+    marketplace_root: Path,
+    verbose: bool,
+) -> None:
+    codex_home.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["CODEX_HOME"] = str(codex_home)
+    command = [codex, "plugin", "marketplace", "add", str(marketplace_root)]
+    run_command(command, env=env, verbose=verbose)
+
+
+def print_plan(
+    source: Path,
+    codex_home: Path,
+    marketplace_root: Path,
+    args: argparse.Namespace,
+) -> None:
+    plugin_target = marketplace_root / "plugins" / PLUGIN_NAME
+    print("Would install Bugshot Codex plugin")
+    print(f"  Source: {source}")
+    print(f"  Codex home: {codex_home}")
+    print(f"  Marketplace root: {marketplace_root}")
+    print(f"  Plugin target: {plugin_target}")
+    print(f"  Run build: {'no' if args.skip_build else 'yes'}")
+    print(f"  Register marketplace: {'no' if args.skip_register else 'yes'}")
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    source = resolved(args.source)
+    codex_home = resolved(args.codex_home)
+    marketplace_root = marketplace_root_for(args)
+
+    if args.dry_run:
+        validate_source(source)
+        print_plan(source, codex_home, marketplace_root, args)
+        return 0
+
+    if not args.skip_build:
+        run_build_plugin(source, verbose=args.verbose)
+
+    validate_source(source)
+    plugin_target = install_payload(source, marketplace_root, verbose=args.verbose)
+    write_marketplace_manifest(marketplace_root, args, verbose=args.verbose)
+
+    if args.skip_register:
+        print("Installed Bugshot Codex plugin files.")
+        print(f"Marketplace root: {marketplace_root}")
+        print(f"Plugin root: {plugin_target}")
+        quoted_codex_home = shlex.quote(str(codex_home))
+        quoted_marketplace_root = shlex.quote(str(marketplace_root))
+        register_command = (
+            f"CODEX_HOME={quoted_codex_home} {args.codex} "
+            f"plugin marketplace add {quoted_marketplace_root}"
+        )
+        print(f"Register later with: {register_command}")
+        return 0
+
+    register_marketplace(args.codex, codex_home, marketplace_root, verbose=args.verbose)
+    print("Installed Bugshot Codex plugin.")
+    print(f"Marketplace root: {marketplace_root}")
+    print(f"Plugin root: {plugin_target}")
+    print("Restart any running Codex session to load the plugin.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
