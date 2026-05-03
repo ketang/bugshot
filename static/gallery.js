@@ -281,7 +281,11 @@
                     button.dataset.themeId = theme.id;
                     button.title = theme.label;
                     button.setAttribute("aria-label", theme.label);
-                    button.textContent = theme.label;
+                    button.setAttribute("aria-pressed", "false");
+                    var swatch = document.createElement("span");
+                    swatch.className = "theme-swatch";
+                    swatch.setAttribute("aria-hidden", "true");
+                    button.appendChild(swatch);
                     button.addEventListener("click", function () {
                         applyTheme(theme.id, true);
                     });

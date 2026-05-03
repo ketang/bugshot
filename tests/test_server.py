@@ -269,6 +269,22 @@ def test_detail_styles_align_filename_and_copy_button(repo_root):
     assert re.search(r"\.btn-copy-filename\s*\{[^}]*line-height:\s*1;", style, re.S)
 
 
+def test_theme_controls_are_separate_from_nav_buttons(repo_root):
+    index_template = open(f"{repo_root}/templates/index.html").read()
+    detail_template = open(f"{repo_root}/templates/detail.html").read()
+    style = open(f"{repo_root}/static/style.css").read()
+
+    assert 'class="theme-toolbar"' in index_template
+    assert 'class="theme-toolbar detail-theme-toolbar"' in detail_template
+    index_controls = index_template.split('class="controls"')[1].split('class="theme-toolbar"')[0]
+    detail_controls = detail_template.split('detail-nav-toolbar"')[1].split('class="theme-toolbar detail-theme-toolbar"')[0]
+    assert 'id="index-theme-controls"' not in index_controls
+    assert 'id="detail-theme-controls"' not in detail_controls
+    assert not re.search(r"\.theme-button,\s*\.btn\s*\{", style)
+    assert re.search(r"\.theme-button\s*\{[^}]*width:\s*28px;", style, re.S)
+    assert re.search(r"\.theme-swatch\s*\{", style, re.S)
+
+
 def test_create_comment(server):
     status, body = _post_json(f"{server.url}/api/comments", {
         "unit_id": "alpha.png",
