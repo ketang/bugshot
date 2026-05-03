@@ -639,6 +639,21 @@ header h1 {
     color: var(--danger);
 }
 
+.feedback-composer {
+    position: sticky;
+    top: 12px;
+    z-index: 30;
+    width: 100%;
+    max-width: 960px;
+    margin: 0 auto 18px;
+    padding: 10px;
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(16px);
+}
+
 .comment-section {
     width: 100%;
     max-width: 960px;
@@ -648,7 +663,7 @@ header h1 {
 #comment-form {
     display: flex;
     gap: 8px;
-    margin-bottom: 16px;
+    margin-bottom: 0;
 }
 
 #comment-input,
@@ -672,7 +687,7 @@ header h1 {
 
 .comment-status {
     min-height: 18px;
-    margin: -8px 0 14px;
+    margin: 8px 2px 0;
     font-size: 12px;
 }
 
