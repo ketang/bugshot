@@ -27,19 +27,37 @@ from user comments.
    Grouped units may include `bugshot-unit.json` to set the display label and
    explicit asset/metadata ordering.
 2. Find the bugshot installation directory (the directory containing this `SKILL.md`).
-3. Run the CLI with `--json` and capture both stdout and stderr:
+3. Select the bind address by running the skill helper script. Capture stdout
+   as the bind address and preserve stderr for the explanatory message:
 
 ```bash
-python3 {{bugshot_dir}}/bugshot_cli.py --json {{directory}}
+bind_address="$({{bugshot_dir}}/select-bind-address)"
 ```
 
-4. Read the first line of the CLI's stderr — it is `Gallery is running at <url>`. In an interactive agent session, immediately print this URL in the visible conversation even if the CLI is running as a background command. Tell the user:
+   The helper prints the selected address on stdout and an explanatory message
+   on stderr. In an interactive agent session, immediately print the explanatory
+   message in the visible conversation. The helper treats `SSH_CONNECTION`,
+   `SSH_CLIENT`, or `SSH_TTY` as remote-login signals; it captures those signals
+   in a separate variable before testing them. If a remote-login signal is
+   present, it selects `0.0.0.0`; otherwise it selects `127.0.0.1`.
+
+4. Run the CLI with `--json --bind "$bind_address"` and capture both stdout and
+   stderr:
+
+```bash
+python3 {{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory}}
+```
+
+5. Read the first line of the CLI's stderr — it is `Gallery is running at <url>`. In an interactive agent session, immediately print this URL in the visible conversation even if the CLI is running as a background command. Tell the user:
 
    > Bugshot gallery is running at `<url>`. Open that URL, review the units, type comments on any issues you see, then click "Done Reviewing".
 
-   The gallery binds to `0.0.0.0` by default, so the URL is reachable from other hosts on the network. If the user wants loopback only, pass `--local-only`.
+   The skill selects the bind address before launching the CLI. In SSH-like
+   sessions, it binds to `0.0.0.0` so the URL can be reachable from other hosts
+   on the network. Otherwise it binds to `127.0.0.1`. If the user explicitly
+   requests a bind mode, honor that request instead of using the helper.
 
-5. Wait for the CLI to exit. The CLI handles all polling, heartbeat timeout, and browser lifecycle internally. Do not poll any HTTP endpoints yourself.
+6. Wait for the CLI to exit. The CLI handles all polling, heartbeat timeout, and browser lifecycle internally. Do not poll any HTTP endpoints yourself.
 
 ## Process Comments
 
