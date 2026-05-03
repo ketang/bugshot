@@ -248,9 +248,12 @@ def test_grouped_unit_does_not_infer_reference_asset_without_manifest_field(tmp_
 def test_gallery_js_wires_copy_filename_shortcut(repo_root):
     script = open(f"{repo_root}/static/gallery.js").read()
     assert 'SHORTCUT_KEY_COPY_FILENAME = "c"' in script
+    assert 'SHORTCUT_KEY_THEME = "t"' in script
     assert 'SHORTCUT_KEY_NEXT_ALTERNATE = "."' in script
     assert 'SHORTCUT_KEY_PREVIOUS_ALTERNATE = ","' in script
     assert 'THEME_STORAGE_KEY = "bugshot-theme"' in script
+    assert "cycleTheme()" in script
+    assert "theme-select" in script
     assert 'id: "mono-light"' in script
     assert 'id: "mono-dark"' in script
     assert "rewriteSvgPrimaryColor" in script
@@ -267,6 +270,21 @@ def test_detail_styles_align_filename_and_copy_button(repo_root):
     assert ".svg-rendered .svg-asset" in style
     assert re.search(r"\.detail-filename\s*\{[^}]*line-height:\s*1;", style, re.S)
     assert re.search(r"\.btn-copy-filename\s*\{[^}]*line-height:\s*1;", style, re.S)
+
+
+def test_theme_controls_are_labeled_selects_not_buttons(repo_root):
+    index_template = open(f"{repo_root}/templates/index.html").read()
+    detail_template = open(f"{repo_root}/templates/detail.html").read()
+    style = open(f"{repo_root}/static/style.css").read()
+
+    assert 'id="index-theme-controls"' in index_template.split('class="controls"')[1].split("</div>")[0]
+    assert 'id="detail-theme-controls"' in detail_template.split('detail-nav-toolbar"')[1].split("</div>")[0]
+    assert 'class="theme-toolbar"' not in index_template
+    assert 'class="theme-toolbar detail-theme-toolbar"' not in detail_template
+    assert not re.search(r"\.theme-button,\s*\.btn\s*\{", style)
+    assert re.search(r"\.theme-select-control\s*\{", style, re.S)
+    assert re.search(r"\.theme-select-label\s*\{", style, re.S)
+    assert re.search(r"\.theme-select\s*\{", style, re.S)
 
 
 def test_create_comment(server):

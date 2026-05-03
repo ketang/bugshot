@@ -487,6 +487,7 @@ _SHORTCUT_LEGEND_ROW_NAVIGATION = [
     ("n/.", "next"),
     ("p/,", "previous"),
     ("i", "index"),
+    ("t", "theme"),
 ]
 
 _SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED = [

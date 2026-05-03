@@ -175,7 +175,6 @@ header h1 {
 }
 
 .controls,
-.theme-controls,
 .detail-nav-toolbar {
     display: flex;
     align-items: center;
@@ -184,10 +183,10 @@ header h1 {
 }
 
 .theme-controls {
-    justify-content: center;
+    display: flex;
+    align-items: center;
 }
 
-.theme-button,
 .btn {
     appearance: none;
     background: var(--panel);
@@ -207,17 +206,49 @@ header h1 {
         transform 0.15s ease;
 }
 
-.theme-button:hover,
 .btn:hover {
     border-color: var(--accent);
     color: var(--accent-strong);
     transform: translateY(-1px);
 }
 
-.theme-button.is-active {
-    background: var(--bg-muted);
+.theme-select-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.theme-select-label {
+    color: var(--text-soft);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.theme-select {
+    appearance: auto;
+    min-width: 108px;
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 5px 26px 5px 8px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+}
+
+.theme-select:hover,
+.theme-select:focus {
     border-color: var(--accent);
-    color: var(--accent-strong);
+}
+
+.theme-select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .btn:disabled {
