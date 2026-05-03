@@ -1352,13 +1352,18 @@
         if (!toolbar) {
             return state;
         }
-        toolbar.hidden = false;
 
         var card = assetsContainer.querySelector(".asset-card");
         var image = card ? card.querySelector("img") : null;
         if (!card || !image) {
             return state;
         }
+
+        var assetHeader = card.querySelector(".asset-header");
+        if (assetHeader && toolbar.parentNode !== assetHeader) {
+            assetHeader.appendChild(toolbar);
+        }
+        toolbar.hidden = false;
 
         card.classList.add("has-region-overlay");
         state.imageElement = image;
@@ -1934,6 +1939,13 @@
         var commentInput = document.getElementById("comment-input");
         var commentSubmit = commentForm.querySelector("button[type='submit']");
         var commentsList = document.getElementById("comments-list");
+        var commentsLink = document.createElement("a");
+        commentsLink.className = "comments-count-link";
+        commentsLink.href = "#comments-list";
+        commentsLink.hidden = true;
+        if (commentSubmit) {
+            commentSubmit.insertAdjacentElement("afterend", commentsLink);
+        }
         var selectionIdCounter = 0;
         var commentStatus = document.createElement("div");
         commentStatus.className = "comment-status";
@@ -2001,6 +2013,7 @@
                     commentStatus.textContent = "";
                     selectionIdCounter = 0;
                     comments.forEach(appendComment);
+                    updateCommentsCountLink();
                     regionState.existingRegions = comments
                         .map(function (c) { return c.region; })
                         .filter(function (r) { return r != null; });
@@ -2064,6 +2077,7 @@
                             setServerReachable(true);
                             commentStatus.textContent = "";
                             item.remove();
+                            updateCommentsCountLink();
                         })
                         .catch(function () {
                             showServerDown("Bugshot server is unreachable. Comment was not deleted.");
@@ -2117,6 +2131,13 @@
             item.appendChild(bodyElement);
             item.appendChild(actions);
             commentsList.appendChild(item);
+            updateCommentsCountLink();
+        }
+
+        function updateCommentsCountLink() {
+            var count = commentsList.querySelectorAll(".comment-item").length;
+            commentsLink.hidden = count === 0;
+            commentsLink.textContent = count + " " + (count === 1 ? "comment" : "comments");
         }
     }
 
@@ -2124,10 +2145,14 @@
         var card = document.createElement("section");
         card.className = "asset-card";
 
+        var header = document.createElement("div");
+        header.className = "asset-header";
+
         var title = document.createElement("div");
         title.className = "asset-title";
         title.textContent = asset.name;
-        card.appendChild(title);
+        header.appendChild(title);
+        card.appendChild(header);
 
         appendAssetPreview(card, asset, false);
         return card;

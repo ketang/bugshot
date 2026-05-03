@@ -55,6 +55,12 @@
                 <button type="button" class="btn-cancel-region" id="cancel-replace-region" title="Cancel replace (Esc)">×</button>
             </span>
         </div>
+        <div class="feedback-composer">
+            <form id="comment-form">
+                <input type="text" id="comment-input" placeholder="Describe an issue..." autocomplete="off">
+                <button type="submit" class="btn">Submit</button>
+            </form>
+        </div>
         <div class="detail-content">
             <div id="unit-assets" class="unit-assets">
                 <!-- Unit assets injected by gallery.js -->
@@ -71,10 +77,6 @@
             </div>
         </div>
         <div class="comment-section">
-            <form id="comment-form">
-                <input type="text" id="comment-input" placeholder="Describe an issue..." autocomplete="off">
-                <button type="submit" class="btn">Submit</button>
-            </form>
             <div id="comments-list">
                 <!-- Populated by gallery.js -->
             </div>
