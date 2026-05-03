@@ -152,6 +152,14 @@ def test_grouped_detail_page_renders_assets_and_metadata(grouped_server):
     assert '"primary_color": "#111111"' in body
 
 
+def test_detail_page_places_feedback_composer_before_assets(grouped_server):
+    resp = urllib.request.urlopen(f"{grouped_server.url}/view/login-button")
+    body = resp.read().decode()
+    assert 'class="feedback-composer"' in body
+    assert body.index('class="feedback-composer"') < body.index('id="unit-assets"')
+    assert body.index('id="comments-list"') > body.index('id="unit-assets"')
+
+
 def test_grouped_detail_page_legend_keeps_unit_id_label(grouped_server):
     resp = urllib.request.urlopen(f"{grouped_server.url}/view/login-button")
     body = resp.read().decode()
@@ -606,3 +614,13 @@ def test_detail_styles_subdue_committed_regions(repo_root):
     assert ".comment-item.is-hovered" in style
     assert ".asset-card.has-region-overlay.region-hover-active" in style
     assert "cursor: pointer" in style
+
+
+def test_detail_styles_float_feedback_composer(repo_root):
+    style = open(f"{repo_root}/static/style.css").read()
+    assert ".feedback-composer" in style
+    composer_start = style.index(".feedback-composer")
+    composer_end = style.index("\n}", composer_start)
+    composer_rule = style[composer_start:composer_end]
+    assert "position: sticky" in composer_rule
+    assert "z-index" in composer_rule
