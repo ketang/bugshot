@@ -17,6 +17,7 @@
     var SHORTCUT_KEY_TOGGLE_UNCHANGED = "u";
     var SHORTCUT_KEY_MODE_NEXT = "m";
     var SHORTCUT_KEY_MODE_PREV = "M";
+    var SHORTCUT_KEY_THEME = "t";
     var VIZDIFF_MODE_KEY = "bugshot:vizdiff:mode";
     var VIZDIFF_MODES = ["side-by-side", "swipe", "onion", "diff"];
     var SHORTCUT_KEY_CYCLE_TOOL = "d";
@@ -161,6 +162,9 @@
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
             event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_THEME && !hasModifier) {
+            cycleTheme();
+            event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_TOGGLE_UNCHANGED && isIndex && vizdiffActive) {
             toggleVizdiffUnchangedFilter();
             event.preventDefault();
@@ -274,26 +278,34 @@
             .forEach(function (container) {
                 container.textContent = "";
                 container.classList.add("theme-controls-ready");
+
+                var label = document.createElement("label");
+                label.className = "theme-select-control";
+
+                var labelText = document.createElement("span");
+                labelText.className = "theme-select-label";
+                labelText.textContent = "Theme";
+                label.appendChild(labelText);
+
+                var select = document.createElement("select");
+                select.className = "theme-select";
+                select.title = "Theme options";
+                select.setAttribute("aria-label", "Theme options");
                 THEME_ORDER.forEach(function (theme) {
-                    var button = document.createElement("button");
-                    button.type = "button";
-                    button.className = "theme-button";
-                    button.dataset.themeId = theme.id;
-                    button.title = theme.label;
-                    button.setAttribute("aria-label", theme.label);
-                    button.setAttribute("aria-pressed", "false");
-                    var swatch = document.createElement("span");
-                    swatch.className = "theme-swatch";
-                    swatch.setAttribute("aria-hidden", "true");
-                    button.appendChild(swatch);
-                    button.addEventListener("click", function () {
-                        applyTheme(theme.id, true);
-                    });
-                    container.appendChild(button);
+                    var option = document.createElement("option");
+                    option.value = theme.id;
+                    option.textContent = theme.label;
+                    select.appendChild(option);
                 });
+                select.addEventListener("change", function () {
+                    applyTheme(select.value, true);
+                });
+
+                label.appendChild(select);
+                container.appendChild(label);
             });
 
-        syncThemeButtons();
+        syncThemeControls();
     }
 
     function loadThemeId() {
@@ -311,7 +323,7 @@
 
         currentTheme = themeId;
         document.body.dataset.theme = themeId;
-        syncThemeButtons();
+        syncThemeControls();
         rerenderSvgAssets();
 
         if (!persist) {
@@ -324,12 +336,22 @@
         }
     }
 
-    function syncThemeButtons() {
-        Array.prototype.slice.call(document.querySelectorAll(".theme-button")).forEach(function (button) {
-            var isActive = button.dataset.themeId === currentTheme;
-            button.classList.toggle("is-active", isActive);
-            button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    function syncThemeControls() {
+        Array.prototype.slice.call(document.querySelectorAll(".theme-select")).forEach(function (select) {
+            select.value = currentTheme;
         });
+    }
+
+    function cycleTheme() {
+        var currentIndex = 0;
+        for (var index = 0; index < THEME_ORDER.length; index += 1) {
+            if (THEME_ORDER[index].id === currentTheme) {
+                currentIndex = index;
+                break;
+            }
+        }
+        var nextTheme = THEME_ORDER[(currentIndex + 1) % THEME_ORDER.length];
+        applyTheme(nextTheme.id, true);
     }
 
     function findTheme(themeId) {
