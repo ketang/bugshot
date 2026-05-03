@@ -540,6 +540,21 @@ def test_gallery_js_wires_region_tool_shortcut(repo_root):
     assert 'region-badge' in script
 
 
+def test_gallery_js_moves_region_toolbar_into_asset_header(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    assert "asset-header" in script
+    assert 'card.querySelector(".asset-header")' in script
+    assert "assetHeader.appendChild(toolbar)" in script
+
+
+def test_gallery_js_updates_comments_count_link(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    assert "comments-count-link" in script
+    assert 'commentsLink.href = "#comments-list"' in script
+    assert "function updateCommentsCountLink()" in script
+    assert 'count + " " + (count === 1 ? "comment" : "comments")' in script
+
+
 def test_detail_legend_marks_region_drawing_entry(server):
     # The 'd cycle tool' entry must be rendered as a uniquely-targetable
     # element so the client can toggle it based on whether the current unit
@@ -623,4 +638,11 @@ def test_detail_styles_float_feedback_composer(repo_root):
     composer_end = style.index("\n}", composer_start)
     composer_rule = style[composer_start:composer_end]
     assert "position: sticky" in composer_rule
+    assert "top: 6px" in composer_rule
+    assert "margin: 0 auto 18px" in composer_rule
     assert "z-index" in composer_rule
+    assert "padding: 2px" in composer_rule
+    assert ".comment-status:empty" in style
+    assert ".comments-count-link" in style
+    assert "margin-left: 8px" in style
+    assert "background: var(--bg-muted)" in style

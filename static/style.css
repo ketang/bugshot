@@ -641,12 +641,11 @@ header h1 {
 
 .feedback-composer {
     position: sticky;
-    top: 12px;
+    top: 6px;
     z-index: 30;
-    width: 100%;
-    max-width: 960px;
+    width: min(720px, calc(100vw - 48px));
     margin: 0 auto 18px;
-    padding: 10px;
+    padding: 2px;
     background: var(--panel-strong);
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -666,6 +665,36 @@ header h1 {
     margin-bottom: 0;
 }
 
+#comment-form .btn {
+    padding: 5px 12px;
+    border-radius: 8px;
+    line-height: 1.2;
+}
+
+.comments-count-link {
+    align-self: center;
+    margin-left: 8px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-muted);
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.comments-count-link:hover {
+    border-color: var(--border-strong);
+    background: var(--panel);
+    color: var(--accent-strong);
+}
+
+.comments-count-link[hidden] {
+    display: none;
+}
+
 #comment-input,
 .jump-modal-input {
     flex: 1;
@@ -673,9 +702,10 @@ header h1 {
     background: var(--panel);
     color: var(--text);
     border: 1px solid var(--border-strong);
-    padding: 10px 12px;
-    border-radius: 12px;
+    padding: 5px 8px;
+    border-radius: 8px;
     font-size: 14px;
+    line-height: 1.2;
     font-family: inherit;
 }
 
@@ -687,8 +717,12 @@ header h1 {
 
 .comment-status {
     min-height: 18px;
-    margin: 8px 2px 0;
+    margin: 4px 2px 0;
     font-size: 12px;
+}
+
+.comment-status:empty {
+    display: none;
 }
 
 .detail-actions {
@@ -1139,12 +1173,23 @@ header h1 {
     border-radius: 4px;
 }
 
+.asset-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.asset-header .asset-title {
+    min-width: 0;
+}
+
 .detail-tools {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-bottom: 1px solid var(--border);
+    margin-left: auto;
     flex-wrap: wrap;
 }
 
@@ -1208,7 +1253,6 @@ header h1 {
 }
 
 .pending-region-indicator {
-    margin-left: auto;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
