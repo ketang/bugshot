@@ -51,6 +51,8 @@ documented in `docs/specs/2026-05-01-vizdiff-manifest.md`.
 
 ```bash
 python -m pytest tests/ -v
+npm run build:frontend
+npm run test:frontend
 bash tests/e2e_test.sh
 ```
 

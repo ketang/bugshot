@@ -11,7 +11,8 @@
     "removeComments": false,
     "strict": false,
     "strictNullChecks": false,
-    "target": "ES5"
+    "target": "ES5",
+    "types": []
   },
   "files": ["static/gallery.ts"]
 }

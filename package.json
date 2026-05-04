@@ -2,9 +2,12 @@
   "name": "bugshot",
   "private": true,
   "scripts": {
-    "build:frontend": "tsc -p tsconfig.json"
+    "build:frontend": "tsc -p tsconfig.json",
+    "test:frontend": "vitest run"
   },
   "devDependencies": {
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.5",
     "typescript": "^5.9.3"
   }
 }
