@@ -25,7 +25,7 @@ If no commit exists, stop — the version file needs manual bootstrapping.
 ### Step 2 — Check for canonical changes
 
 ```
-git diff --name-only <baseline> -- SKILL.md gallery_server.py ansi_render.py static/ templates/ scripts/build-plugin
+git diff --name-only <baseline> -- skills/*/SKILL.md skills/*/overlays/ gallery_server.py ansi_render.py static/ templates/ scripts/build-plugin
 ```
 
 If nothing changed, stop. No bump needed.
@@ -33,7 +33,7 @@ If nothing changed, stop. No bump needed.
 ### Step 3 — Read the diffs
 
 ```
-git diff <baseline>..HEAD -- SKILL.md gallery_server.py ansi_render.py static/ templates/ scripts/build-plugin
+git diff <baseline>..HEAD -- skills/*/SKILL.md skills/*/overlays/ gallery_server.py ansi_render.py static/ templates/ scripts/build-plugin
 ```
 
 ### Step 4 — Classify the changes
@@ -41,7 +41,8 @@ git diff <baseline>..HEAD -- SKILL.md gallery_server.py ansi_render.py static/ t
 **Behavioral (bump):**
 - New, removed, or renamed files in `static/` or `templates/`
 - Changed logic in `gallery_server.py` or `ansi_render.py`
-- Changed SKILL.md content (frontmatter or instructions)
+- Changed canonical SKILL.md content (frontmatter or instructions)
+- Changed agent-specific overlay content
 - New or modified test assertions
 - Changed metadata constants or asset generation in `scripts/build-plugin`
 

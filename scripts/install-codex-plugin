@@ -22,7 +22,6 @@ INSTALLATION_POLICIES = ("AVAILABLE", "INSTALLED_BY_DEFAULT", "NOT_AVAILABLE")
 AUTHENTICATION_POLICIES = ("ON_INSTALL", "ON_USE")
 PAYLOAD_PATHS = (
     ".codex-plugin",
-    "skills",
     "assets",
     "plugin-version.json",
     "INSTALL.md",
@@ -143,6 +142,19 @@ def validate_source(source: Path) -> None:
     if plugin_name != PLUGIN_NAME:
         message = f"{manifest_path} must declare name {PLUGIN_NAME!r}, got {plugin_name!r}"
         raise SystemExit(message)
+
+    skills_path = manifest.get("skills")
+    if not isinstance(skills_path, str) or not skills_path:
+        raise SystemExit(f"{manifest_path} must declare a non-empty skills path")
+
+    source_root = source.resolve()
+    resolved_skills_path = (source / skills_path).resolve()
+    try:
+        resolved_skills_path.relative_to(source_root)
+    except ValueError as exc:
+        raise SystemExit(f"{manifest_path} skills path must stay inside the plugin source") from exc
+    if not resolved_skills_path.exists():
+        raise SystemExit(f"Missing Codex skills payload path: {skills_path}")
 
 
 def run_command(

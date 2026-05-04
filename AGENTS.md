@@ -43,7 +43,9 @@ documented in `docs/specs/2026-05-01-vizdiff-manifest.md`.
 - `static/`, `templates/` — CSS, compiled JS, TypeScript source, and HTML served to the browser.
 - `static/gallery.ts` — source of truth for the gallery frontend; compiled to
   `static/gallery.js` by `npm run build:frontend` and `scripts/build-plugin`.
-- `skills/bugshot/SKILL.md` — Claude Code skill definition (agent-facing contract). Hand-edited; copied alongside the python files into the plugin distribution by `scripts/build-plugin`.
+- `skills/bugshot/SKILL.md` — canonical, agent-neutral skill definition. Hand-edited; copied alongside the python files into source skill directories by `scripts/build-plugin`.
+- `skills/bugshot/overlays/` — agent-specific skill guidance appended to generated Claude and Codex payloads.
+- `.claude/skills/`, `.codex-plugin/skills/` — generated agent-specific skill payloads. Do not hand-edit generated files.
 - `docs/specs/2026-04-24-review-units.md` — filesystem contract for Bugshot review roots and review units.
 - `tests/` — pytest unit tests and `e2e_test.sh`.
 
@@ -69,12 +71,13 @@ bash tests/e2e_test.sh
 
 ## Documentation Sync Rules
 
-`skills/bugshot/SKILL.md` is the contract consumed by an agent invoking bugshot. It must stay aligned with the code:
+`skills/bugshot/SKILL.md` is the canonical contract consumed by an agent invoking bugshot. Agent-specific behavior belongs in `skills/bugshot/overlays/`, and `scripts/build-plugin` emits the Claude and Codex payloads. These files must stay aligned with the code:
 
 - Changing `bugshot_cli.py` flags, stdout/stderr output format, or exit behavior → update `SKILL.md`.
 - Changing recognized extensions in `gallery_server.py` → update `SKILL.md`.
 - Changing the JSON draft schema produced by `bugshot_workflow.py` → update `SKILL.md`.
 - Changing the default bind address or adding bind-related flags → update `SKILL.md` and the Quick Start section above.
+- Changing agent-specific invocation behavior → update the matching overlay and rebuild generated skill payloads.
 
 Make these updates in the same commit as the code change.
 
