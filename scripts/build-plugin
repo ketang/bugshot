@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 import struct
 import sys
 import zlib
@@ -290,6 +291,13 @@ def write_skill_dir(verbose: bool = False) -> None:
         write_one_skill_dir(skill_name, spec, verbose=verbose)
 
 
+def compile_frontend(verbose: bool = False) -> None:
+    """Compile the TypeScript gallery source into the served static JS asset."""
+    subprocess.run(["npm", "run", "build:frontend"], cwd=ROOT, check=True)
+    if verbose:
+        print("  compiled static/gallery.ts -> static/gallery.js")
+
+
 def write_one_skill_dir(skill_name: str, spec: dict, verbose: bool = False) -> None:
     skill_dir = ROOT / "skills" / skill_name
     skill_dir.mkdir(parents=True, exist_ok=True)
@@ -313,7 +321,8 @@ def write_one_skill_dir(skill_name: str, spec: dict, verbose: bool = False) -> N
         target = skill_dir / subdir
         if target.exists():
             shutil.rmtree(target)
-        shutil.copytree(ROOT / subdir, target)
+        ignore = shutil.ignore_patterns("*.ts") if subdir == "static" else None
+        shutil.copytree(ROOT / subdir, target, ignore=ignore)
         if verbose:
             print(f"  wrote skills/{skill_name}/{subdir}/")
 
@@ -330,6 +339,7 @@ def main() -> None:
         version = bump_version(version)
         write_json(VERSION_FILE, {"version": version})
         print(f"Bumped to {version}")
+    compile_frontend(verbose)
     write_json(ROOT / ".claude-plugin" / "plugin.json", claude_manifest(version), verbose)
     write_json(ROOT / ".codex-plugin" / "plugin.json", codex_manifest(version), verbose)
     write_skill_dir(verbose)

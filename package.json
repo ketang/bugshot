@@ -1,0 +1,10 @@
+{
+  "name": "bugshot",
+  "private": true,
+  "scripts": {
+    "build:frontend": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

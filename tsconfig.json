@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "checkJs": false,
+    "declaration": false,
+    "lib": ["DOM", "ES2020"],
+    "module": "none",
+    "noEmitOnError": true,
+    "noImplicitAny": false,
+    "outFile": "static/gallery.js",
+    "removeComments": false,
+    "strict": false,
+    "strictNullChecks": false,
+    "target": "ES5"
+  },
+  "files": ["static/gallery.ts"]
+}

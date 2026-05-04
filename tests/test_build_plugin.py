@@ -21,6 +21,8 @@ def load_build_plugin(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod, "ROOT", tmp_path)
     monkeypatch.setattr(mod, "VERSION_FILE", version_file)
+    mod._real_compile_frontend = mod.compile_frontend
+    monkeypatch.setattr(mod, "compile_frontend", lambda verbose=False: None)
     return mod
 
 
@@ -119,12 +121,14 @@ def test_build_compiles_gallery_typescript_before_copying_skills(tmp_path, monke
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mod, "compile_frontend", mod._real_compile_frontend)
     monkeypatch.setattr(sys, "argv", ["build-plugin"])
     mod.main()
 
     assert calls == [(["npm", "run", "build:frontend"], tmp_path, True)]
     assert (tmp_path / "static" / "gallery.js").read_text() == "compiled js\n"
     assert (tmp_path / "skills" / "bugshot" / "static" / "gallery.js").read_text() == "compiled js\n"
+    assert not (tmp_path / "skills" / "bugshot" / "static" / "gallery.ts").exists()
 
 
 def test_build_generates_vizline_skill(tmp_path, monkeypatch):

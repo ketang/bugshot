@@ -40,7 +40,9 @@ documented in `docs/specs/2026-05-01-vizdiff-manifest.md`.
 - `bugshot_workflow.py` — review loop: starts the gallery in-process, polls SQLite for completion, emits drafts.
 - `gallery_server.py` — HTTP server + `create_server()` factory. Runs standalone or in a background thread inside the workflow.
 - `ansi_render.py` — ANSI escape sequence to HTML converter.
-- `static/`, `templates/` — CSS/JS and HTML served to the browser.
+- `static/`, `templates/` — CSS, compiled JS, TypeScript source, and HTML served to the browser.
+- `static/gallery.ts` — source of truth for the gallery frontend; compiled to
+  `static/gallery.js` by `npm run build:frontend` and `scripts/build-plugin`.
 - `skills/bugshot/SKILL.md` — Claude Code skill definition (agent-facing contract). Hand-edited; copied alongside the python files into the plugin distribution by `scripts/build-plugin`.
 - `docs/specs/2026-04-24-review-units.md` — filesystem contract for Bugshot review roots and review units.
 - `tests/` — pytest unit tests and `e2e_test.sh`.

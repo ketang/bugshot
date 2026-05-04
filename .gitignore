@@ -4,6 +4,7 @@
 !.claude/skills/
 !.claude/skills/**
 __pycache__/
+node_modules/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
