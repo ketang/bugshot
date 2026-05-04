@@ -513,6 +513,13 @@
             meta.textContent = describeUnit(unitInfo);
             item.appendChild(meta);
 
+            if (unitInfo.vizdiff && unitInfo.vizdiff.expected_change) {
+                var expected = document.createElement("div");
+                expected.className = "item-expected-change";
+                expected.textContent = unitInfo.vizdiff.expected_change;
+                item.appendChild(expected);
+            }
+
             gallery.appendChild(item);
         });
     }
@@ -1894,6 +1901,7 @@
             assetsContainer.appendChild(createAssetCard(asset));
         });
 
+        renderExpectedChangeSummary(currentUnit);
         initVizdiffDetailModes(currentUnit);
         // The detail legend hardcodes a 'd cycle tool' entry server-side so
         // we can toggle it here using the same predicate that gates the 'd'
@@ -2138,6 +2146,29 @@
             var count = commentsList.querySelectorAll(".comment-item").length;
             commentsLink.hidden = count === 0;
             commentsLink.textContent = count + " " + (count === 1 ? "comment" : "comments");
+        }
+    }
+
+    function renderExpectedChangeSummary(unit) {
+        if (!unit || !unit.vizdiff || !unit.vizdiff.expected_change) {
+            return;
+        }
+        var modeBar = document.getElementById("mode-bar");
+        var summary = document.createElement("section");
+        summary.className = "expected-change-summary";
+
+        var label = document.createElement("div");
+        label.className = "expected-change-label";
+        label.textContent = "Expected change";
+        summary.appendChild(label);
+
+        var body = document.createElement("div");
+        body.className = "expected-change-body";
+        body.textContent = unit.vizdiff.expected_change;
+        summary.appendChild(body);
+
+        if (modeBar && modeBar.parentNode) {
+            modeBar.parentNode.insertBefore(summary, modeBar.nextSibling);
         }
     }
 

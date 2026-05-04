@@ -13,7 +13,9 @@ import vizdiff_workflow
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a bugshot vizdiff review session")
-    parser.add_argument("feature_worktree", type=Path)
+    parser.add_argument("feature_worktree", type=Path, nargs="?")
+    parser.add_argument("--manifest", type=Path,
+                        help="Open a prebuilt non-interactive vizdiff manifest")
     parser.add_argument("--base", default=None,
                         help="Base ref name (used for the no-baseline error message)")
     parser.add_argument("--base-dir", default=None, type=Path,
@@ -31,13 +33,19 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
     bind_address = "127.0.0.1" if args.local_only else args.bind
+    if args.manifest is None and args.feature_worktree is None:
+        print("feature_worktree is required unless --manifest is supplied", file=sys.stderr)
+        return 2
     try:
-        review_root = vizdiff_workflow.build_review_root(
-            feature_worktree=args.feature_worktree,
-            base_ref=args.base,
-            base_dir=args.base_dir,
-            head_only=args.head_only,
-        )
+        if args.manifest is not None:
+            review_root = vizdiff_workflow.build_review_root_from_manifest(args.manifest)
+        else:
+            review_root = vizdiff_workflow.build_review_root(
+                feature_worktree=args.feature_worktree,
+                base_ref=args.base,
+                base_dir=args.base_dir,
+                head_only=args.head_only,
+            )
     except vizdiff_workflow.VizdiffError as error:
         print(str(error), file=sys.stderr)
         return 1
