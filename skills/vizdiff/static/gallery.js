@@ -1,6 +1,5 @@
 (function () {
     "use strict";
-
     var HEARTBEAT_INTERVAL_MS = 5000;
     var INDEX_PATH = "/";
     var SHORTCUT_KEY_SIZE = "s";
@@ -84,7 +83,6 @@
         { id: "ocean", label: "Ocean", tone: "dark", swapColor: "#eef4ff" },
         { id: "moss", label: "Moss", tone: "dark", swapColor: "#eef5e8" }
     ];
-
     var isIndex = !!window.__BUGSHOT_UNITS__;
     var isDetail = !!window.__BUGSHOT_DETAIL__;
     var detailPage = window.__BUGSHOT_DETAIL__ || null;
@@ -108,49 +106,39 @@
     // top-level keydown handler can drive ArrowUp/ArrowDown comment-list
     // navigation through the same highlight machinery (qh9) that hover uses.
     var currentRegionState = null;
-
     applyTheme(currentTheme, false);
     initServerStatusBanner();
     initThemeControls();
     checkServerHeartbeat();
     setInterval(checkServerHeartbeat, HEARTBEAT_INTERVAL_MS);
-
     window.addEventListener("beforeunload", function () {
         if (!isInternalNavigation) {
             navigator.sendBeacon("/api/closed");
         }
     });
-
     bindDoneButton(document.getElementById("done-btn"));
     bindDoneButton(document.getElementById("detail-done-btn"));
-
     if (isIndex) {
         initIndex();
     }
-
     if (isDetail) {
         initDetail();
     }
-
     initJumpModal();
-
     document.addEventListener("keydown", function (event) {
         if (isJumpModalOpen()) {
             handleJumpModalKeydown(event);
             return;
         }
-
         if (event.key === "Escape" && currentRegionState && currentRegionState.replaceTarget) {
             cancelRegionReplace(currentRegionState);
             event.preventDefault();
             return;
         }
-
         var activeElement = document.activeElement;
         var isTyping = activeElement &&
             (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
         var hasModifier = event.ctrlKey || event.metaKey || event.altKey;
-
         if (isTyping) {
             if (event.key === "Escape") {
                 activeElement.blur();
@@ -158,65 +146,67 @@
             }
             return;
         }
-
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_THEME && !hasModifier) {
+        }
+        else if (event.key === SHORTCUT_KEY_THEME && !hasModifier) {
             cycleTheme();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_TOGGLE_UNCHANGED && isIndex && vizdiffActive) {
+        }
+        else if (event.key === SHORTCUT_KEY_TOGGLE_UNCHANGED && isIndex && vizdiffActive) {
             toggleVizdiffUnchangedFilter();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_MODE_NEXT && isDetail && vizdiffDetailActive) {
+        }
+        else if (event.key === SHORTCUT_KEY_MODE_NEXT && isDetail && vizdiffDetailActive) {
             cycleVizdiffMode(1);
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_MODE_PREV && isDetail && vizdiffDetailActive) {
+        }
+        else if (event.key === SHORTCUT_KEY_MODE_PREV && isDetail && vizdiffDetailActive) {
             cycleVizdiffMode(-1);
             event.preventDefault();
-        } else if (DIGIT_KEYS.indexOf(event.key) !== -1) {
+        }
+        else if (DIGIT_KEYS.indexOf(event.key) !== -1) {
             navigateToImageByShortcut(event.key);
             event.preventDefault();
-        } else if ((event.key === SHORTCUT_KEY_NEXT || event.key === SHORTCUT_KEY_ENTER) && isIndex) {
+        }
+        else if ((event.key === SHORTCUT_KEY_NEXT || event.key === SHORTCUT_KEY_ENTER) && isIndex) {
             navigateToFirstImage();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_PREVIOUS && isIndex) {
+        }
+        else if (event.key === SHORTCUT_KEY_PREVIOUS && isIndex) {
             navigateToLastImage();
             event.preventDefault();
-        } else if (
-            isDetail &&
+        }
+        else if (isDetail &&
             detailPage.nav.next &&
-            (
-                event.key === SHORTCUT_KEY_NEXT ||
-                (!hasModifier && event.key === SHORTCUT_KEY_NEXT_ALTERNATE)
-            )
-        ) {
+            (event.key === SHORTCUT_KEY_NEXT ||
+                (!hasModifier && event.key === SHORTCUT_KEY_NEXT_ALTERNATE))) {
             navigateTo(detailPage.nav.next);
             event.preventDefault();
-        } else if (
-            isDetail &&
+        }
+        else if (isDetail &&
             detailPage.nav.prev &&
-            (
-                event.key === SHORTCUT_KEY_PREVIOUS ||
-                (!hasModifier && event.key === SHORTCUT_KEY_PREVIOUS_ALTERNATE)
-            )
-        ) {
+            (event.key === SHORTCUT_KEY_PREVIOUS ||
+                (!hasModifier && event.key === SHORTCUT_KEY_PREVIOUS_ALTERNATE))) {
             navigateTo(detailPage.nav.prev);
             event.preventDefault();
-        } else if (
-            event.key === SHORTCUT_KEY_COPY_FILENAME &&
+        }
+        else if (event.key === SHORTCUT_KEY_COPY_FILENAME &&
             isDetail &&
-            !hasModifier
-        ) {
+            !hasModifier) {
             copyFilenameToClipboard();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_GO_TO) {
+        }
+        else if (event.key === SHORTCUT_KEY_GO_TO) {
             openJumpModal();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_INDEX) {
+        }
+        else if (event.key === SHORTCUT_KEY_INDEX) {
             navigateTo(INDEX_PATH);
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_QUIT) {
+        }
+        else if (event.key === SHORTCUT_KEY_QUIT) {
             if (!isServerReachable) {
                 showServerDown("Bugshot server is unreachable. Reconnect before finishing review.");
                 event.preventDefault();
@@ -226,30 +216,30 @@
                 completeSession();
             }
             event.preventDefault();
-        } else if (
-            event.key === SHORTCUT_KEY_CYCLE_TOOL &&
+        }
+        else if (event.key === SHORTCUT_KEY_CYCLE_TOOL &&
             isDetail &&
-            unitSupportsRegionDrawing(currentUnit)
-        ) {
+            unitSupportsRegionDrawing(currentUnit)) {
             cycleActiveTool();
             event.preventDefault();
-        } else if (event.key === SHORTCUT_KEY_FOCUS_COMMENT && isDetail) {
+        }
+        else if (event.key === SHORTCUT_KEY_FOCUS_COMMENT && isDetail) {
             focusCommentInput();
             event.preventDefault();
-        } else if (event.key === "ArrowDown" && isDetail && !hasModifier) {
+        }
+        else if (event.key === "ArrowDown" && isDetail && !hasModifier) {
             focusAdjacentComment(1);
             event.preventDefault();
-        } else if (event.key === "ArrowUp" && isDetail && !hasModifier) {
+        }
+        else if (event.key === "ArrowUp" && isDetail && !hasModifier) {
             focusAdjacentComment(-1);
             event.preventDefault();
         }
     });
-
     function bindDoneButton(button) {
         if (!button) {
             return;
         }
-
         serverActionButtons.push(button);
         button.addEventListener("click", function () {
             if (!isServerReachable) {
@@ -261,87 +251,74 @@
             }
         });
     }
-
     function initServerStatusBanner() {
         serverStatusBanner = document.createElement("div");
         serverStatusBanner.className = "server-status-banner is-hidden";
         serverStatusBanner.setAttribute("role", "status");
-
         serverStatusText = document.createElement("span");
         serverStatusBanner.appendChild(serverStatusText);
         document.body.insertBefore(serverStatusBanner, document.body.firstChild);
     }
-
     function initThemeControls() {
         [document.getElementById("index-theme-controls"), document.getElementById("detail-theme-controls")]
             .filter(Boolean)
             .forEach(function (container) {
-                container.textContent = "";
-                container.classList.add("theme-controls-ready");
-
-                var label = document.createElement("label");
-                label.className = "theme-select-control";
-
-                var labelText = document.createElement("span");
-                labelText.className = "theme-select-label";
-                labelText.textContent = "Theme";
-                label.appendChild(labelText);
-
-                var select = document.createElement("select");
-                select.className = "theme-select";
-                select.title = "Theme options";
-                select.setAttribute("aria-label", "Theme options");
-                THEME_ORDER.forEach(function (theme) {
-                    var option = document.createElement("option");
-                    option.value = theme.id;
-                    option.textContent = theme.label;
-                    select.appendChild(option);
-                });
-                select.addEventListener("change", function () {
-                    applyTheme(select.value, true);
-                });
-
-                label.appendChild(select);
-                container.appendChild(label);
+            container.textContent = "";
+            container.classList.add("theme-controls-ready");
+            var label = document.createElement("label");
+            label.className = "theme-select-control";
+            var labelText = document.createElement("span");
+            labelText.className = "theme-select-label";
+            labelText.textContent = "Theme";
+            label.appendChild(labelText);
+            var select = document.createElement("select");
+            select.className = "theme-select";
+            select.title = "Theme options";
+            select.setAttribute("aria-label", "Theme options");
+            THEME_ORDER.forEach(function (theme) {
+                var option = document.createElement("option");
+                option.value = theme.id;
+                option.textContent = theme.label;
+                select.appendChild(option);
             });
-
+            select.addEventListener("change", function () {
+                applyTheme(select.value, true);
+            });
+            label.appendChild(select);
+            container.appendChild(label);
+        });
         syncThemeControls();
     }
-
     function loadThemeId() {
         try {
             return localStorage.getItem(THEME_STORAGE_KEY) || THEME_ORDER[1].id;
-        } catch (error) {
+        }
+        catch (error) {
             return THEME_ORDER[1].id;
         }
     }
-
     function applyTheme(themeId, persist) {
         if (!findTheme(themeId)) {
             themeId = THEME_ORDER[1].id;
         }
-
         currentTheme = themeId;
         document.body.dataset.theme = themeId;
         syncThemeControls();
         rerenderSvgAssets();
-
         if (!persist) {
             return;
         }
-
         try {
             localStorage.setItem(THEME_STORAGE_KEY, themeId);
-        } catch (error) {
+        }
+        catch (error) {
         }
     }
-
     function syncThemeControls() {
         Array.prototype.slice.call(document.querySelectorAll(".theme-select")).forEach(function (select) {
             select.value = currentTheme;
         });
     }
-
     function cycleTheme() {
         var currentIndex = 0;
         for (var index = 0; index < THEME_ORDER.length; index += 1) {
@@ -353,7 +330,6 @@
         var nextTheme = THEME_ORDER[(currentIndex + 1) % THEME_ORDER.length];
         applyTheme(nextTheme.id, true);
     }
-
     function findTheme(themeId) {
         for (var index = 0; index < THEME_ORDER.length; index += 1) {
             if (THEME_ORDER[index].id === themeId) {
@@ -362,128 +338,109 @@
         }
         return null;
     }
-
     function currentThemeDefinition() {
         return findTheme(currentTheme) || THEME_ORDER[1];
     }
-
     function checkServerHeartbeat() {
         fetch("/api/heartbeat", { method: "POST" })
             .then(requireOkResponse)
             .then(function () {
-                setServerReachable(true);
-            })
+            setServerReachable(true);
+        })
             .catch(function () {
-                showServerDown("Bugshot server is unreachable. New comments cannot be saved until it responds again.");
-            });
+            showServerDown("Bugshot server is unreachable. New comments cannot be saved until it responds again.");
+        });
     }
-
     function setServerReachable(isReachable) {
         isServerReachable = isReachable;
         serverActionButtons.forEach(function (button) {
             button.disabled = !isReachable;
         });
-
         if (isReachable) {
             serverStatusBanner.classList.add("is-hidden");
             serverStatusText.textContent = "";
         }
     }
-
     function showServerDown(message) {
         setServerReachable(false);
         serverStatusText.textContent = message;
         serverStatusBanner.classList.remove("is-hidden");
     }
-
     function requireOkResponse(response) {
         if (!response.ok) {
             throw new Error("Request failed with status " + response.status);
         }
         return response;
     }
-
     function fetchJson(url, options) {
         return fetch(url, options)
             .then(requireOkResponse)
             .then(function (response) {
-                setServerReachable(true);
-                return response.json();
-            });
+            setServerReachable(true);
+            return response.json();
+        });
     }
-
     function initJumpModal() {
         jumpModal = document.createElement("div");
         jumpModal.className = "jump-modal is-hidden";
         jumpModal.innerHTML =
             '<div class="jump-modal-card" role="dialog" aria-modal="true" aria-labelledby="jump-modal-title">' +
-            '<div class="jump-modal-title" id="jump-modal-title">Go to unit</div>' +
-            '<div class="jump-modal-copy">Type any unit number and press Enter.</div>' +
-            '<form class="jump-modal-form" id="jump-modal-form">' +
-            '<input class="jump-modal-input" id="jump-modal-input" inputmode="numeric" autocomplete="off" />' +
-            '<button type="submit" class="btn">Go</button>' +
-            "</form>" +
-            '<div class="jump-modal-error" id="jump-modal-error"></div>' +
-            "</div>";
+                '<div class="jump-modal-title" id="jump-modal-title">Go to unit</div>' +
+                '<div class="jump-modal-copy">Type any unit number and press Enter.</div>' +
+                '<form class="jump-modal-form" id="jump-modal-form">' +
+                '<input class="jump-modal-input" id="jump-modal-input" inputmode="numeric" autocomplete="off" />' +
+                '<button type="submit" class="btn">Go</button>' +
+                "</form>" +
+                '<div class="jump-modal-error" id="jump-modal-error"></div>' +
+                "</div>";
         document.body.appendChild(jumpModal);
-
         jumpModalInput = document.getElementById("jump-modal-input");
         jumpModalError = document.getElementById("jump-modal-error");
-
         jumpModal.addEventListener("click", function (event) {
             if (event.target === jumpModal) {
                 closeJumpModal();
             }
         });
-
         document.getElementById("jump-modal-form").addEventListener("submit", function (event) {
             event.preventDefault();
             submitJumpModal();
         });
     }
-
     function completeSession() {
         fetch("/api/done", { method: "POST" })
             .then(requireOkResponse)
             .then(function () {
-                setServerReachable(true);
-                window.close();
-
-                document.body.textContent = "";
-                var message = document.createElement("div");
-                message.style.cssText =
-                    "display:flex;align-items:center;justify-content:center;" +
+            setServerReachable(true);
+            window.close();
+            document.body.textContent = "";
+            var message = document.createElement("div");
+            message.style.cssText =
+                "display:flex;align-items:center;justify-content:center;" +
                     "height:100vh;color:var(--text-color);font-size:18px;";
-                message.textContent = "Session complete. You can close this tab.";
-                document.body.appendChild(message);
-            })
+            message.textContent = "Session complete. You can close this tab.";
+            document.body.appendChild(message);
+        })
             .catch(function () {
-                showServerDown("Bugshot server is unreachable. Review was not marked complete.");
-            });
+            showServerDown("Bugshot server is unreachable. Review was not marked complete.");
+        });
     }
-
     function initIndex() {
         var units = window.__BUGSHOT_UNITS__;
         vizdiffUnits = units;
         vizdiffActive = units.some(function (u) { return !!u.vizdiff; });
-
         if (vizdiffActive) {
             vizdiffFilters = loadVizdiffFilters(units);
             renderVizdiffFilterBar();
         }
-
         renderIndexTiles();
     }
-
     function renderIndexTiles() {
         var units = vizdiffUnits || window.__BUGSHOT_UNITS__;
         var gallery = document.getElementById("gallery");
         gallery.replaceChildren();
-
         var visible = vizdiffActive
             ? applyVizdiffFilters(units, vizdiffFilters)
             : units;
-
         visible.forEach(function (unitInfo) {
             var item = document.createElement("a");
             item.className = "gallery-item";
@@ -492,7 +449,6 @@
                 item.dataset.cls = unitInfo.vizdiff.classification;
             }
             bindInternalNavigation(item);
-
             if (unitInfo.vizdiff) {
                 var badge = document.createElement("span");
                 badge.className = "tile-badge";
@@ -500,56 +456,49 @@
                 badge.textContent = unitInfo.vizdiff.classification.toUpperCase();
                 item.appendChild(badge);
             }
-
             appendAssetPreview(item, unitInfo.primary_asset, true);
-
             var label = document.createElement("div");
             label.className = "item-label";
             label.textContent = unitInfo.label;
             item.appendChild(label);
-
             var meta = document.createElement("div");
             meta.className = "item-meta";
             meta.textContent = describeUnit(unitInfo);
             item.appendChild(meta);
-
             if (unitInfo.vizdiff && unitInfo.vizdiff.expected_change) {
                 var expected = document.createElement("div");
                 expected.className = "item-expected-change";
                 expected.textContent = unitInfo.vizdiff.expected_change;
                 item.appendChild(expected);
             }
-
             gallery.appendChild(item);
         });
     }
-
     function loadVizdiffFilters(units) {
         var stored = null;
         try {
             stored = JSON.parse(localStorage.getItem(VIZDIFF_FILTER_KEY) || "null");
-        } catch (e) {
+        }
+        catch (e) {
             stored = null;
         }
         var filters = stored && typeof stored === "object"
             ? Object.assign({}, VIZDIFF_DEFAULT_FILTERS, stored)
             : Object.assign({}, VIZDIFF_DEFAULT_FILTERS);
-
         var counts = countVizdiffByClass(units);
         if (counts.changed === 0 && counts.added === 0 && counts.removed === 0) {
             filters = { changed: true, added: true, removed: true, unchanged: true };
         }
         return filters;
     }
-
     function persistVizdiffFilters() {
         try {
             localStorage.setItem(VIZDIFF_FILTER_KEY, JSON.stringify(vizdiffFilters));
-        } catch (e) {
+        }
+        catch (e) {
             // localStorage unavailable; no-op.
         }
     }
-
     function countVizdiffByClass(units) {
         var counts = { changed: 0, added: 0, removed: 0, unchanged: 0 };
         units.forEach(function (u) {
@@ -559,7 +508,6 @@
         });
         return counts;
     }
-
     function applyVizdiffFilters(units, filters) {
         var visible = units.filter(function (u) {
             if (!u.vizdiff) {
@@ -577,7 +525,6 @@
         });
         return visible;
     }
-
     function renderVizdiffFilterBar() {
         var bar = document.getElementById("filter-bar");
         if (!bar) {
@@ -585,7 +532,6 @@
         }
         bar.hidden = false;
         bar.replaceChildren();
-
         var counts = countVizdiffByClass(vizdiffUnits);
         VIZDIFF_CLASS_ORDER.forEach(function (cls) {
             var chip = document.createElement("button");
@@ -593,17 +539,14 @@
             chip.className = "filter-chip";
             chip.dataset.cls = cls;
             chip.dataset.active = String(!!vizdiffFilters[cls]);
-
             var label = document.createElement("span");
             label.className = "label";
             label.textContent = cls.toUpperCase();
             chip.appendChild(label);
-
             var count = document.createElement("span");
             count.className = "count";
             count.textContent = String(counts[cls] || 0);
             chip.appendChild(count);
-
             chip.addEventListener("click", function () {
                 vizdiffFilters[cls] = !vizdiffFilters[cls];
                 chip.dataset.active = String(!!vizdiffFilters[cls]);
@@ -613,7 +556,6 @@
             bar.appendChild(chip);
         });
     }
-
     function toggleVizdiffUnchangedFilter() {
         if (!vizdiffFilters) {
             return;
@@ -626,7 +568,6 @@
         }
         renderIndexTiles();
     }
-
     function initVizdiffDetailModes(unit) {
         var vd = unit && unit.vizdiff;
         if (!vd || !vd.base_asset || !vd.head_asset) {
@@ -641,7 +582,6 @@
             // asset cards; the canvas modes have no pixel grid to subtract.
             return;
         }
-
         vizdiffDetailActive = true;
         var modeBar = document.getElementById("mode-bar");
         var pane = document.getElementById("viewer-pane");
@@ -650,7 +590,6 @@
         }
         modeBar.hidden = false;
         pane.hidden = false;
-
         var overlayToggle = document.getElementById("overlay-toggle");
         if (overlayToggle) {
             overlayToggle.checked = false;
@@ -658,49 +597,40 @@
                 renderVizdiffMode(loadVizdiffMode(), unit);
             });
         }
-
-        Array.prototype.forEach.call(
-            modeBar.querySelectorAll(".mode-button"),
-            function (btn) {
-                btn.addEventListener("click", function () {
-                    setVizdiffMode(btn.dataset.mode, unit);
-                });
-            }
-        );
-
+        Array.prototype.forEach.call(modeBar.querySelectorAll(".mode-button"), function (btn) {
+            btn.addEventListener("click", function () {
+                setVizdiffMode(btn.dataset.mode, unit);
+            });
+        });
         setVizdiffMode(loadVizdiffMode(), unit);
     }
-
     function loadVizdiffMode() {
         try {
             var stored = localStorage.getItem(VIZDIFF_MODE_KEY);
             if (stored && VIZDIFF_MODES.indexOf(stored) !== -1) {
                 return stored;
             }
-        } catch (e) {
+        }
+        catch (e) {
             // ignored
         }
         return "side-by-side";
     }
-
     function setVizdiffMode(mode, unit) {
         if (VIZDIFF_MODES.indexOf(mode) === -1) {
             mode = "side-by-side";
         }
         try {
             localStorage.setItem(VIZDIFF_MODE_KEY, mode);
-        } catch (e) {
+        }
+        catch (e) {
             // ignored
         }
-        Array.prototype.forEach.call(
-            document.querySelectorAll(".mode-button"),
-            function (btn) {
-                btn.dataset.active = String(btn.dataset.mode === mode);
-            }
-        );
+        Array.prototype.forEach.call(document.querySelectorAll(".mode-button"), function (btn) {
+            btn.dataset.active = String(btn.dataset.mode === mode);
+        });
         renderVizdiffMode(mode, unit);
     }
-
     function cycleVizdiffMode(delta) {
         var current = loadVizdiffMode();
         var idx = VIZDIFF_MODES.indexOf(current);
@@ -710,7 +640,6 @@
         var next = (idx + delta + VIZDIFF_MODES.length) % VIZDIFF_MODES.length;
         setVizdiffMode(VIZDIFF_MODES[next], currentUnit);
     }
-
     function renderVizdiffMode(mode, unit) {
         var pane = document.getElementById("viewer-pane");
         if (!pane) {
@@ -734,7 +663,6 @@
                 break;
         }
     }
-
     function assetByName(unit, name) {
         if (!unit || !name) {
             return null;
@@ -746,7 +674,6 @@
         }
         return null;
     }
-
     function buildSideFigure(label, asset) {
         var fig = document.createElement("figure");
         fig.className = "vizdiff-figure";
@@ -759,7 +686,6 @@
         fig.appendChild(img);
         return fig;
     }
-
     function renderVizdiffSideBySide(pane, base, head) {
         var wrap = document.createElement("div");
         wrap.className = "vizdiff-side-by-side";
@@ -770,12 +696,10 @@
             applyOverlayToFigure(wrap.lastChild, base, head);
         }
     }
-
     function overlayEnabled() {
         var toggle = document.getElementById("overlay-toggle");
         return !!(toggle && toggle.checked);
     }
-
     function applyOverlayToFigure(figure, base, head) {
         loadImagePair(base, head, function (baseImg, headImg) {
             if (baseImg.naturalWidth !== headImg.naturalWidth ||
@@ -790,7 +714,6 @@
             figure.appendChild(canvas);
         });
     }
-
     function paintOverlay(canvas, baseImg, headImg) {
         var ctx = canvas.getContext("2d");
         ctx.drawImage(headImg, 0, 0);
@@ -813,38 +736,30 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.putImageData(out, 0, 0);
     }
-
     function renderVizdiffSwipe(pane, base, head) {
         var wrap = document.createElement("div");
         wrap.className = "vizdiff-swipe-wrap";
         var stage = document.createElement("div");
         stage.className = "vizdiff-swipe-stage";
-
         var baseImg = document.createElement("img");
         baseImg.className = "vizdiff-swipe-base";
         baseImg.src = base.src;
         baseImg.alt = base.name;
-
         var headImg = document.createElement("img");
         headImg.className = "vizdiff-swipe-head";
         headImg.src = head.src;
         headImg.alt = head.name;
-
         var handle = document.createElement("div");
         handle.className = "vizdiff-swipe-handle";
-
         stage.appendChild(baseImg);
         stage.appendChild(headImg);
         stage.appendChild(handle);
         wrap.appendChild(stage);
-
         var note = document.createElement("p");
         note.className = "vizdiff-mode-note";
         note.textContent = "Drag the handle to swipe between base (left) and head (right).";
         wrap.appendChild(note);
-
         pane.appendChild(wrap);
-
         var split = 0.5;
         function applySplit() {
             var pct = (split * 100).toFixed(2) + "%";
@@ -852,7 +767,6 @@
             handle.style.left = pct;
         }
         applySplit();
-
         function onMove(clientX) {
             var rect = stage.getBoundingClientRect();
             if (rect.width <= 0) {
@@ -876,26 +790,21 @@
             handle.addEventListener("pointerup", onPointerUp);
         });
     }
-
     function renderVizdiffOnion(pane, base, head) {
         var wrap = document.createElement("div");
         wrap.className = "vizdiff-onion-wrap";
         var stage = document.createElement("div");
         stage.className = "vizdiff-onion-stage";
-
         var baseImg = document.createElement("img");
         baseImg.className = "vizdiff-onion-base";
         baseImg.src = base.src;
         baseImg.alt = base.name;
-
         var headImg = document.createElement("img");
         headImg.className = "vizdiff-onion-head";
         headImg.src = head.src;
         headImg.alt = head.name;
-
         stage.appendChild(baseImg);
         stage.appendChild(headImg);
-
         var controls = document.createElement("div");
         controls.className = "vizdiff-onion-controls";
         var label = document.createElement("label");
@@ -906,30 +815,26 @@
         slider.max = "100";
         slider.value = "50";
         slider.addEventListener("input", function () {
-            headImg.style.opacity = String(slider.value / 100);
+            headImg.style.opacity = String(Number(slider.value) / 100);
         });
         headImg.style.opacity = "0.5";
         controls.appendChild(label);
         controls.appendChild(slider);
-
         wrap.appendChild(stage);
         wrap.appendChild(controls);
         pane.appendChild(wrap);
     }
-
     function renderVizdiffDiff(pane, base, head) {
         var wrap = document.createElement("div");
         wrap.className = "vizdiff-diff-wrap";
         var canvas = document.createElement("canvas");
         canvas.className = "vizdiff-diff-canvas";
         wrap.appendChild(canvas);
-
         var note = document.createElement("p");
         note.className = "vizdiff-mode-note";
         note.textContent = "Pixels glow where base and head differ.";
         wrap.appendChild(note);
         pane.appendChild(wrap);
-
         loadImagePair(base, head, function (baseImg, headImg) {
             if (baseImg.naturalWidth !== headImg.naturalWidth ||
                 baseImg.naturalHeight !== headImg.naturalHeight) {
@@ -942,7 +847,6 @@
             paintDiffCanvas(canvas, baseImg, headImg);
         });
     }
-
     function paintDiffCanvas(canvas, baseImg, headImg) {
         var ctx = canvas.getContext("2d");
         ctx.drawImage(baseImg, 0, 0);
@@ -961,7 +865,6 @@
         }
         ctx.putImageData(out, 0, 0);
     }
-
     function loadImagePair(base, head, callback) {
         var baseImg = new Image();
         var headImg = new Image();
@@ -974,12 +877,11 @@
         }
         baseImg.onload = maybeReady;
         headImg.onload = maybeReady;
-        baseImg.onerror = function () { /* skip */ };
-        headImg.onerror = function () { /* skip */ };
+        baseImg.onerror = function () { };
+        headImg.onerror = function () { };
         baseImg.src = base.src;
         headImg.src = head.src;
     }
-
     function appendAssetPreview(container, asset, isPreview) {
         if (asset.type === "image") {
             var imageElement = document.createElement("img");
@@ -988,12 +890,10 @@
             container.appendChild(imageElement);
             return;
         }
-
         if (asset.type === "svg") {
             container.appendChild(createSvgPreview(asset, isPreview));
             return;
         }
-
         var previewDiv = document.createElement("div");
         previewDiv.className = isPreview ? "ansi-preview" : "ansi-rendered";
         var previewPre = document.createElement("pre");
@@ -1001,7 +901,6 @@
         previewDiv.appendChild(previewPre);
         container.appendChild(previewDiv);
     }
-
     function createSvgPreview(asset, isPreview) {
         var wrapper = document.createElement("div");
         wrapper.className = isPreview ? "svg-preview" : "svg-rendered";
@@ -1011,94 +910,76 @@
         renderSvgIntoWrapper(wrapper);
         return wrapper;
     }
-
     function renderSvgIntoWrapper(wrapper) {
         var svgMarkup = wrapper.dataset.svgMarkup || "";
         var fallbackSrc = wrapper.dataset.fallbackSrc || "";
         wrapper.textContent = "";
-
         if (!svgMarkup) {
             renderSvgFallback(wrapper, fallbackSrc);
             return;
         }
-
         var parser = new DOMParser();
         var doc = parser.parseFromString(svgMarkup, "image/svg+xml");
         var root = doc.documentElement;
-
         if (!root || root.nodeName.toLowerCase() === "parsererror") {
             renderSvgFallback(wrapper, fallbackSrc);
             return;
         }
-
         var primaryColor = wrapper.dataset.primaryColor || "";
         var swapColor = themeSwapColor(primaryColor);
         if (swapColor) {
             rewriteSvgPrimaryColor(root, primaryColor, swapColor);
         }
-
         root.classList.add("svg-asset");
         wrapper.appendChild(document.importNode(root, true));
     }
-
     function renderSvgFallback(wrapper, src) {
         var fallback = document.createElement("img");
         fallback.src = src;
         fallback.alt = "SVG asset";
         wrapper.appendChild(fallback);
     }
-
     function themeSwapColor(primaryColor) {
         if (!primaryColor) {
             return null;
         }
-
         var theme = currentThemeDefinition();
         var luminance = colorLuminance(primaryColor);
         if (luminance === null) {
             return null;
         }
-
         if (theme.tone === "light" && luminance >= 0.68) {
             return theme.swapColor;
         }
-
         if (theme.tone === "dark" && luminance <= 0.38) {
             return theme.swapColor;
         }
-
         return null;
     }
-
     function colorLuminance(hexColor) {
         var match = /^#?([0-9a-f]{6})$/i.exec(hexColor);
         if (!match) {
             return null;
         }
-
         var value = match[1];
         var channels = [
             parseInt(value.slice(0, 2), 16) / 255,
             parseInt(value.slice(2, 4), 16) / 255,
             parseInt(value.slice(4, 6), 16) / 255
         ];
-
         for (var index = 0; index < channels.length; index += 1) {
             channels[index] = channels[index] <= 0.03928
                 ? channels[index] / 12.92
                 : Math.pow((channels[index] + 0.055) / 1.055, 2.4);
         }
-
         return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
     }
-
     function rewriteSvgPrimaryColor(root, primaryColor, swapColor) {
         Array.prototype.slice.call(root.querySelectorAll("*")).concat([root]).forEach(function (node) {
             rewriteSvgPresentationAttributes(node, primaryColor, swapColor);
         });
         root.setAttribute("color", swapColor);
     }
-
     function rewriteSvgPresentationAttributes(node, primaryColor, swapColor) {
         ["fill", "stroke"].forEach(function (attrName) {
             var attrValue = node.getAttribute(attrName);
@@ -1106,12 +987,10 @@
                 node.setAttribute(attrName, "currentColor");
             }
         });
-
         var styleValue = node.getAttribute("style");
         if (!styleValue) {
             return;
         }
-
         var rewritten = styleValue.split(";").map(function (declaration) {
             if (declaration.indexOf(":") === -1) {
                 return declaration;
@@ -1124,15 +1003,12 @@
             }
             return declaration;
         }).join(";");
-
         node.setAttribute("style", rewritten);
     }
-
     function normalizeColor(value) {
         if (!value) {
             return null;
         }
-
         var normalized = String(value).trim().toLowerCase();
         if (/^#[0-9a-f]{3}$/.test(normalized)) {
             return "#" + normalized.charAt(1) + normalized.charAt(1) +
@@ -1144,13 +1020,11 @@
         }
         return null;
     }
-
     function rerenderSvgAssets() {
         Array.prototype.slice.call(document.querySelectorAll(".svg-preview, .svg-rendered")).forEach(function (wrapper) {
             renderSvgIntoWrapper(wrapper);
         });
     }
-
     function describeUnit(unitInfo) {
         var pieces = [];
         pieces.push(unitInfo.asset_count === 1 ? "1 asset" : unitInfo.asset_count + " assets");
@@ -1159,7 +1033,6 @@
         }
         return pieces.join(" · ");
     }
-
     function navigateToFirstImage() {
         var units = getAvailableImages();
         if (!units.length) {
@@ -1167,16 +1040,13 @@
         }
         navigateTo("/view/" + units[0].encoded_id);
     }
-
     function navigateToLastImage() {
         var units = getAvailableImages();
         if (!units.length) {
             return;
         }
-
         navigateTo("/view/" + units[units.length - 1].encoded_id);
     }
-
     function unitSupportsRegionDrawing(unit) {
         if (!unit || !unit.assets || unit.assets.length !== 1) {
             return false;
@@ -1184,15 +1054,13 @@
         var assetType = unit.assets[0].type;
         return assetType === "image" || assetType === "svg";
     }
-
     // Pure hit-test helpers operate on normalized [0, 1] coordinates so they
     // are independent of overlay/image dimensions. The path tolerance is also
     // in normalized units; callers translate from screen pixels.
     function hitTestRect(px, py, region) {
         return px >= region.x && px <= region.x + region.w &&
-               py >= region.y && py <= region.y + region.h;
+            py >= region.y && py <= region.y + region.h;
     }
-
     function hitTestEllipse(px, py, region) {
         if (!region.rx || !region.ry) {
             return false;
@@ -1201,7 +1069,6 @@
         var dy = (py - region.cy) / region.ry;
         return dx * dx + dy * dy <= 1;
     }
-
     function distancePointToSegment(px, py, x1, y1, x2, y2) {
         var dx = x2 - x1;
         var dy = y2 - y1;
@@ -1209,24 +1076,24 @@
         var t = 0;
         if (lenSq > 0) {
             t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
-            if (t < 0) { t = 0; } else if (t > 1) { t = 1; }
+            if (t < 0) {
+                t = 0;
+            }
+            else if (t > 1) {
+                t = 1;
+            }
         }
         var ex = px - (x1 + t * dx);
         var ey = py - (y1 + t * dy);
         return Math.sqrt(ex * ex + ey * ey);
     }
-
     function hitTestPath(px, py, region, tolerance) {
         var pts = region.points || [];
         if (pts.length < 2) {
             return false;
         }
         for (var i = 0; i < pts.length - 1; i++) {
-            if (distancePointToSegment(
-                    px, py,
-                    pts[i][0], pts[i][1],
-                    pts[i + 1][0], pts[i + 1][1]
-                ) <= tolerance) {
+            if (distancePointToSegment(px, py, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]) <= tolerance) {
                 return true;
             }
         }
@@ -1234,24 +1101,24 @@
         // implicit closing segment in hit-testing for visual parity.
         var first = pts[0];
         var last = pts[pts.length - 1];
-        return distancePointToSegment(
-            px, py,
-            last[0], last[1],
-            first[0], first[1]
-        ) <= tolerance;
+        return distancePointToSegment(px, py, last[0], last[1], first[0], first[1]) <= tolerance;
     }
-
     function hitTestRegions(px, py, regions, pathTolerance) {
         // Topmost (last drawn) wins on overlap.
         for (var i = regions.length - 1; i >= 0; i--) {
             var r = regions[i];
-            if (r.type === TOOL_RECT && hitTestRect(px, py, r)) { return r; }
-            if (r.type === TOOL_ELLIPSE && hitTestEllipse(px, py, r)) { return r; }
-            if (r.type === TOOL_PATH && hitTestPath(px, py, r, pathTolerance)) { return r; }
+            if (r.type === TOOL_RECT && hitTestRect(px, py, r)) {
+                return r;
+            }
+            if (r.type === TOOL_ELLIPSE && hitTestEllipse(px, py, r)) {
+                return r;
+            }
+            if (r.type === TOOL_PATH && hitTestPath(px, py, r, pathTolerance)) {
+                return r;
+            }
         }
         return null;
     }
-
     function setHighlightedSelection(state, selectionId) {
         if (state.highlightedSelectionId === selectionId) {
             return;
@@ -1260,7 +1127,6 @@
         syncHighlightedComment(selectionId);
         renderDrawState(state);
     }
-
     function syncHighlightedComment(selectionId) {
         var hovered = document.querySelectorAll(".comment-item.is-hovered");
         for (var i = 0; i < hovered.length; i++) {
@@ -1269,14 +1135,11 @@
         if (selectionId == null) {
             return;
         }
-        var match = document.querySelector(
-            '.comment-item[data-selection-id="' + selectionId + '"]'
-        );
+        var match = document.querySelector('.comment-item[data-selection-id="' + selectionId + '"]');
         if (match) {
             match.classList.add("is-hovered");
         }
     }
-
     // ArrowUp/ArrowDown navigation through the comment list. Reuses the qh9
     // hover-highlight code path: setHighlightedSelection drives both
     // .is-hovered on the matching comment row and the canvas paint via
@@ -1292,9 +1155,7 @@
         if (!commentsList) {
             return;
         }
-        var rows = Array.prototype.slice.call(
-            commentsList.querySelectorAll(".comment-item")
-        );
+        var rows = Array.prototype.slice.call(commentsList.querySelectorAll(".comment-item"));
         if (rows.length === 0) {
             return;
         }
@@ -1308,7 +1169,8 @@
         var nextIndex;
         if (direction > 0) {
             nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % rows.length;
-        } else {
+        }
+        else {
             nextIndex = currentIndex === -1
                 ? rows.length - 1
                 : (currentIndex - 1 + rows.length) % rows.length;
@@ -1318,7 +1180,8 @@
         var selectionId = selectionAttr ? parseInt(selectionAttr, 10) : null;
         if (currentRegionState) {
             setHighlightedSelection(currentRegionState, selectionId);
-        } else {
+        }
+        else {
             // Region drawing unavailable for this unit: no canvas to paint,
             // but we still drive the comment-row hover state directly so
             // navigation works on multi-asset / ANSI / non-image units.
@@ -1336,7 +1199,6 @@
             row.scrollIntoView({ block: "nearest" });
         }
     }
-
     function setupRegionDrawing(unit, assetsContainer) {
         var state = {
             activeTool: TOOL_OFF,
@@ -1350,35 +1212,29 @@
             assetCard: null,
             replaceTarget: null,
         };
-
         if (!unitSupportsRegionDrawing(unit)) {
             return state;
         }
-
         var toolbar = document.getElementById("detail-tools");
         if (!toolbar) {
             return state;
         }
-
         var card = assetsContainer.querySelector(".asset-card");
         var image = card ? card.querySelector("img") : null;
         if (!card || !image) {
             return state;
         }
-
         var assetHeader = card.querySelector(".asset-header");
         if (assetHeader && toolbar.parentNode !== assetHeader) {
             assetHeader.appendChild(toolbar);
         }
         toolbar.hidden = false;
-
         card.classList.add("has-region-overlay");
         state.imageElement = image;
         state.assetCard = card;
         state.overlay = document.createElement("canvas");
         state.overlay.className = "region-overlay";
         card.appendChild(state.overlay);
-
         function syncCanvasSize() {
             var natW = image.naturalWidth || image.width;
             var natH = image.naturalHeight || image.height;
@@ -1398,32 +1254,28 @@
             state.ctx = state.overlay.getContext("2d");
             redraw(state);
         }
-
         if (image.complete && image.naturalWidth > 0) {
             syncCanvasSize();
-        } else {
+        }
+        else {
             image.addEventListener("load", syncCanvasSize);
         }
         window.addEventListener("resize", syncCanvasSize);
-
         state.overlay.addEventListener("mousedown", function (event) { onMouseDown(state, event); });
         state.overlay.addEventListener("mousemove", function (event) { onMouseMove(state, event); });
         state.overlay.addEventListener("mouseup", function (event) { onMouseUp(state, event); });
         state.overlay.addEventListener("mouseleave", function (event) { onMouseUp(state, event); });
-
         // Card-level hover drives the bidirectional hover-highlight (qh9). The
         // overlay has pointer-events:none in the OFF tool, so events arrive
         // on the card. In drawing modes the overlay captures events first;
         // we early-out below so drawing isn't disturbed.
         card.addEventListener("mousemove", function (event) { onCardHover(state, event); });
         card.addEventListener("mouseleave", function () { onCardLeave(state); });
-
         Array.prototype.slice.call(toolbar.querySelectorAll(".btn-tool")).forEach(function (btn) {
             btn.addEventListener("click", function () {
                 setActiveTool(state, btn.getAttribute("data-tool"));
             });
         });
-
         var cancel = document.getElementById("cancel-pending-region");
         if (cancel) {
             cancel.addEventListener("click", function () {
@@ -1432,17 +1284,14 @@
                 redraw(state);
             });
         }
-
         var cancelReplace = document.getElementById("cancel-replace-region");
         if (cancelReplace) {
             cancelReplace.addEventListener("click", function () {
                 cancelRegionReplace(state);
             });
         }
-
         return state;
     }
-
     function setActiveTool(state, tool) {
         state.activeTool = tool;
         var toolbar = document.getElementById("detail-tools");
@@ -1463,13 +1312,13 @@
             state.overlay.classList.add(nextClass);
         }
     }
-
     function clampUnit(value) {
-        if (value < 0) return 0;
-        if (value > 1) return 1;
+        if (value < 0)
+            return 0;
+        if (value > 1)
+            return 1;
         return value;
     }
-
     function pointFromEvent(state, event) {
         var rect = state.overlay.getBoundingClientRect();
         return [
@@ -1477,7 +1326,6 @@
             clampUnit((event.clientY - rect.top) / rect.height),
         ];
     }
-
     function pointFromImageEvent(state, event) {
         if (!state.imageElement) {
             return null;
@@ -1493,7 +1341,6 @@
         }
         return [x, y];
     }
-
     function onCardHover(state, event) {
         if (state.activeTool !== TOOL_OFF) {
             // Drawing modes own the cursor and the overlay events; don't
@@ -1513,21 +1360,20 @@
                 state.assetCard.classList.add("region-hover-active");
             }
             setHighlightedSelection(state, hit.selection_id || null);
-        } else {
+        }
+        else {
             if (state.assetCard) {
                 state.assetCard.classList.remove("region-hover-active");
             }
             setHighlightedSelection(state, null);
         }
     }
-
     function onCardLeave(state) {
         if (state.assetCard) {
             state.assetCard.classList.remove("region-hover-active");
         }
         setHighlightedSelection(state, null);
     }
-
     function onMouseDown(state, event) {
         if (state.activeTool === TOOL_OFF) {
             return;
@@ -1536,14 +1382,15 @@
         var p = pointFromEvent(state, event);
         if (state.activeTool === TOOL_RECT) {
             state.drawState = { type: TOOL_RECT, origin: p, current: p };
-        } else if (state.activeTool === TOOL_ELLIPSE) {
+        }
+        else if (state.activeTool === TOOL_ELLIPSE) {
             state.drawState = { type: TOOL_ELLIPSE, origin: p, current: p };
-        } else {
+        }
+        else {
             state.drawState = { type: TOOL_PATH, points: [p] };
         }
         renderDrawState(state);
     }
-
     function onMouseMove(state, event) {
         if (!state.drawState) {
             return;
@@ -1551,12 +1398,12 @@
         var p = pointFromEvent(state, event);
         if (state.drawState.type === TOOL_RECT || state.drawState.type === TOOL_ELLIPSE) {
             state.drawState.current = p;
-        } else {
+        }
+        else {
             state.drawState.points.push(p);
         }
         renderDrawState(state);
     }
-
     function onMouseUp(state, _event) {
         if (!state.drawState) {
             return;
@@ -1564,7 +1411,6 @@
         commitDrawState(state);
         state.drawState = null;
     }
-
     function renderDrawState(state) {
         if (!state.drawState) {
             redraw(state);
@@ -1573,10 +1419,9 @@
         redraw(state);
         var preview = previewFromDrawState(state.drawState);
         if (preview) {
-            paintRegion(state, preview, REGION_PENDING_DASH);
+            paintRegion(state, preview, REGION_PENDING_DASH, false);
         }
     }
-
     function previewFromDrawState(drawState) {
         if (drawState.type === TOOL_RECT) {
             var x = Math.min(drawState.origin[0], drawState.current[0]);
@@ -1594,7 +1439,6 @@
         }
         return { type: TOOL_PATH, points: drawState.points.slice() };
     }
-
     function commitDrawState(state) {
         var drawState = state.drawState;
         if (!drawState) {
@@ -1613,7 +1457,6 @@
         redraw(state);
         focusCommentInput();
     }
-
     function buildCommittedRegion(drawState) {
         if (drawState.type === TOOL_RECT) {
             var preview = previewFromDrawState(drawState);
@@ -1624,10 +1467,8 @@
         }
         if (drawState.type === TOOL_ELLIPSE) {
             var ellipsePreview = previewFromDrawState(drawState);
-            if (
-                ellipsePreview.rx < MIN_ELLIPSE_NORMALIZED_RADIUS ||
-                ellipsePreview.ry < MIN_ELLIPSE_NORMALIZED_RADIUS
-            ) {
+            if (ellipsePreview.rx < MIN_ELLIPSE_NORMALIZED_RADIUS ||
+                ellipsePreview.ry < MIN_ELLIPSE_NORMALIZED_RADIUS) {
                 return null;
             }
             return ellipsePreview;
@@ -1637,7 +1478,6 @@
         }
         return { type: TOOL_PATH, points: drawState.points.slice() };
     }
-
     function applyRegionReplace(state, newRegion) {
         var target = state.replaceTarget;
         if (!target) {
@@ -1653,23 +1493,23 @@
             body: JSON.stringify({ body: target.comment.body, region: newRegion }),
         })
             .then(function () {
-                var oldRegion = target.comment.region;
-                target.comment.region = newRegion;
-                var idx = state.existingRegions.indexOf(oldRegion);
-                if (idx !== -1) {
-                    state.existingRegions[idx] = newRegion;
-                } else {
-                    state.existingRegions.push(newRegion);
-                }
-                state.replaceTarget = null;
-                hideReplaceIndicator();
-                redraw(state);
-            })
+            var oldRegion = target.comment.region;
+            target.comment.region = newRegion;
+            var idx = state.existingRegions.indexOf(oldRegion);
+            if (idx !== -1) {
+                state.existingRegions[idx] = newRegion;
+            }
+            else {
+                state.existingRegions.push(newRegion);
+            }
+            state.replaceTarget = null;
+            hideReplaceIndicator();
+            redraw(state);
+        })
             .catch(function () {
-                showServerDown("Bugshot server is unreachable. Region was not replaced.");
-            });
+            showServerDown("Bugshot server is unreachable. Region was not replaced.");
+        });
     }
-
     function beginRegionReplace(state, comment) {
         state.pendingRegion = null;
         hidePendingIndicator();
@@ -1680,7 +1520,6 @@
         showReplaceIndicator(comment);
         redraw(state);
     }
-
     function cancelRegionReplace(state) {
         if (!state.replaceTarget) {
             return;
@@ -1689,7 +1528,6 @@
         hideReplaceIndicator();
         redraw(state);
     }
-
     function removeRegionFromState(state, region) {
         var idx = state.existingRegions.indexOf(region);
         if (idx !== -1) {
@@ -1697,7 +1535,6 @@
         }
         redraw(state);
     }
-
     function showReplaceIndicator(comment) {
         var indicator = document.getElementById("replace-region-indicator");
         var label = document.getElementById("replace-region-target");
@@ -1708,14 +1545,12 @@
             label.textContent = "Selection " + comment.region.selection_id;
         }
     }
-
     function hideReplaceIndicator() {
         var indicator = document.getElementById("replace-region-indicator");
         if (indicator) {
             indicator.hidden = true;
         }
     }
-
     function redraw(state) {
         if (!state.ctx || !state.overlay) {
             return;
@@ -1731,7 +1566,6 @@
             paintRegion(state, state.pendingRegion, REGION_PENDING_DASH, true);
         }
     }
-
     function paintRegion(state, region, dash, isEmphasized) {
         var ctx = state.ctx;
         var w = state.overlay.width;
@@ -1750,20 +1584,14 @@
             ctx.rect(region.x * w, region.y * h, region.w * w, region.h * h);
             ctx.fill();
             ctx.stroke();
-        } else if (region.type === TOOL_ELLIPSE) {
+        }
+        else if (region.type === TOOL_ELLIPSE) {
             ctx.beginPath();
-            ctx.ellipse(
-                region.cx * w,
-                region.cy * h,
-                region.rx * w,
-                region.ry * h,
-                0,
-                0,
-                Math.PI * 2
-            );
+            ctx.ellipse(region.cx * w, region.cy * h, region.rx * w, region.ry * h, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.stroke();
-        } else if (region.type === TOOL_PATH) {
+        }
+        else if (region.type === TOOL_PATH) {
             var points = region.points || [];
             if (points.length > 0) {
                 ctx.beginPath();
@@ -1777,7 +1605,6 @@
             }
         }
         ctx.restore();
-
         if (dash === REGION_COMMITTED_DASH && region.selection_id) {
             var anchor = selectionBadgeAnchor(region, w, h);
             if (anchor) {
@@ -1785,7 +1612,6 @@
             }
         }
     }
-
     function selectionBadgeAnchor(region, w, h) {
         if (region.type === TOOL_RECT) {
             return [region.x * w, region.y * h];
@@ -1800,7 +1626,6 @@
         }
         return null;
     }
-
     function selectionBadgeScale(state) {
         if (!state.imageElement || !state.imageElement.clientWidth) {
             return 1;
@@ -1808,7 +1633,6 @@
         var ratio = state.overlay.width / state.imageElement.clientWidth;
         return ratio > 1 ? ratio : 1;
     }
-
     function paintSelectionBadge(state, anchorX, anchorY, selectionId) {
         var ctx = state.ctx;
         var scale = selectionBadgeScale(state);
@@ -1818,7 +1642,6 @@
         var radius = SELECTION_BADGE_RADIUS * scale;
         var offset = SELECTION_BADGE_OFFSET * scale;
         var label = String(selectionId);
-
         ctx.save();
         ctx.setLineDash([]);
         ctx.font = "600 " + fontPx + "px sans-serif";
@@ -1827,28 +1650,32 @@
         var textWidth = ctx.measureText(label).width;
         var badgeWidth = textWidth + paddingX * 2;
         var badgeHeight = fontPx + paddingY * 2;
-
         var maxX = state.overlay.width - badgeWidth;
         var maxY = state.overlay.height - badgeHeight;
         var bx = anchorX + offset;
         var by = anchorY + offset;
-        if (bx > maxX) { bx = maxX; }
-        if (by > maxY) { by = maxY; }
-        if (bx < 0) { bx = 0; }
-        if (by < 0) { by = 0; }
-
+        if (bx > maxX) {
+            bx = maxX;
+        }
+        if (by > maxY) {
+            by = maxY;
+        }
+        if (bx < 0) {
+            bx = 0;
+        }
+        if (by < 0) {
+            by = 0;
+        }
         ctx.fillStyle = SELECTION_BADGE_FILL;
         ctx.strokeStyle = SELECTION_BADGE_STROKE;
         ctx.lineWidth = Math.max(1, scale);
         traceRoundedRect(ctx, bx, by, badgeWidth, badgeHeight, radius);
         ctx.fill();
         ctx.stroke();
-
         ctx.fillStyle = SELECTION_BADGE_TEXT_COLOR;
         ctx.fillText(label, bx + paddingX, by + badgeHeight / 2);
         ctx.restore();
     }
-
     function traceRoundedRect(ctx, x, y, w, h, r) {
         var radius = Math.min(r, w / 2, h / 2);
         ctx.beginPath();
@@ -1859,7 +1686,6 @@
         ctx.arcTo(x, y, x + w, y, radius);
         ctx.closePath();
     }
-
     function showPendingIndicator(region) {
         var indicator = document.getElementById("pending-region-indicator");
         var typeLabel = document.getElementById("pending-region-type");
@@ -1870,14 +1696,12 @@
             typeLabel.textContent = region.type;
         }
     }
-
     function hidePendingIndicator() {
         var indicator = document.getElementById("pending-region-indicator");
         if (indicator) {
             indicator.hidden = true;
         }
     }
-
     function cycleActiveTool() {
         var pressed = document.querySelector(".btn-tool[aria-pressed='true']");
         var current = pressed ? pressed.getAttribute("data-tool") : TOOL_OFF;
@@ -1888,7 +1712,6 @@
             nextButton.click();
         }
     }
-
     function initDetail() {
         var assetsContainer = document.getElementById("unit-assets");
         var metadataContainer = document.getElementById("unit-metadata");
@@ -1896,11 +1719,9 @@
         var nextSlot = document.getElementById("next-slot");
         var indexButton = document.getElementById("index-btn");
         var copyFilenameButton = document.getElementById("copy-filename-btn");
-
         currentUnit.assets.forEach(function (asset) {
             assetsContainer.appendChild(createAssetCard(asset));
         });
-
         renderExpectedChangeSummary(currentUnit);
         initVizdiffDetailModes(currentUnit);
         // The detail legend hardcodes a 'd cycle tool' entry server-side so
@@ -1914,35 +1735,26 @@
         }
         var regionState = setupRegionDrawing(currentUnit, assetsContainer);
         currentRegionState = regionState;
-
-        previousSlot.appendChild(
-            createNavigationButton({
-                id: "prev-btn",
-                label: "Previous",
-                destination: detailPage.nav.prev,
-                detailName: detailPage.nav.prev_label,
-                direction: "previous",
-            })
-        );
-
-        nextSlot.appendChild(
-            createNavigationButton({
-                id: "next-btn",
-                label: "Next",
-                destination: detailPage.nav.next,
-                detailName: detailPage.nav.next_label,
-                direction: "next",
-            })
-        );
-
+        previousSlot.appendChild(createNavigationButton({
+            id: "prev-btn",
+            label: "Previous",
+            destination: detailPage.nav.prev,
+            detailName: detailPage.nav.prev_label,
+            direction: "previous",
+        }));
+        nextSlot.appendChild(createNavigationButton({
+            id: "next-btn",
+            label: "Next",
+            destination: detailPage.nav.next,
+            detailName: detailPage.nav.next_label,
+            direction: "next",
+        }));
         if (indexButton) {
             bindInternalNavigation(indexButton);
         }
-
         if (copyFilenameButton) {
             copyFilenameButton.addEventListener("click", copyFilenameToClipboard);
         }
-
         var commentForm = document.getElementById("comment-form");
         var commentInput = document.getElementById("comment-input");
         var commentSubmit = commentForm.querySelector("button[type='submit']");
@@ -1958,15 +1770,12 @@
         var commentStatus = document.createElement("div");
         commentStatus.className = "comment-status";
         commentForm.insertAdjacentElement("afterend", commentStatus);
-
         if (commentSubmit) {
             serverActionButtons.push(commentSubmit);
             commentSubmit.disabled = !isServerReachable;
         }
-
         renderMetadata(metadataContainer, currentUnit.metadata);
         loadComments();
-
         commentForm.addEventListener("submit", function (event) {
             event.preventDefault();
             commentStatus.textContent = "";
@@ -1975,69 +1784,63 @@
                 commentStatus.textContent = "Comment was not saved because the server is unreachable.";
                 return;
             }
-
             var body = commentInput.value.trim();
             if (!body) {
                 return;
             }
-
             var submittedRegion = regionState.pendingRegion || null;
             var payload = { unit_id: currentUnit.id, body: body };
             if (submittedRegion) {
                 payload.region = submittedRegion;
             }
-
             fetchJson("/api/comments", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             })
                 .then(function (comment) {
-                    commentInput.value = "";
-                    commentStatus.textContent = "";
-                    appendComment(comment);
-                    if (submittedRegion) {
-                        if (comment.region && comment.region.selection_id) {
-                            submittedRegion.selection_id = comment.region.selection_id;
-                        }
-                        regionState.existingRegions.push(submittedRegion);
-                        if (regionState.pendingRegion === submittedRegion) {
-                            regionState.pendingRegion = null;
-                            hidePendingIndicator();
-                        }
-                        redraw(regionState);
+                commentInput.value = "";
+                commentStatus.textContent = "";
+                appendComment(comment);
+                if (submittedRegion) {
+                    if (comment.region && comment.region.selection_id) {
+                        submittedRegion.selection_id = comment.region.selection_id;
                     }
-                })
+                    regionState.existingRegions.push(submittedRegion);
+                    if (regionState.pendingRegion === submittedRegion) {
+                        regionState.pendingRegion = null;
+                        hidePendingIndicator();
+                    }
+                    redraw(regionState);
+                }
+            })
                 .catch(function () {
-                    showServerDown("Bugshot server is unreachable. This comment was not saved.");
-                    commentStatus.textContent = "Comment was not saved. Keep the text here and try again after reconnecting.";
-                });
+                showServerDown("Bugshot server is unreachable. This comment was not saved.");
+                commentStatus.textContent = "Comment was not saved. Keep the text here and try again after reconnecting.";
+            });
         });
-
         function loadComments() {
             fetchJson("/api/comments?unit_id=" + encodeURIComponent(currentUnit.id))
                 .then(function (comments) {
-                    commentsList.textContent = "";
-                    commentStatus.textContent = "";
-                    selectionIdCounter = 0;
-                    comments.forEach(appendComment);
-                    updateCommentsCountLink();
-                    regionState.existingRegions = comments
-                        .map(function (c) { return c.region; })
-                        .filter(function (r) { return r != null; });
-                    redraw(regionState);
-                })
+                commentsList.textContent = "";
+                commentStatus.textContent = "";
+                selectionIdCounter = 0;
+                comments.forEach(appendComment);
+                updateCommentsCountLink();
+                regionState.existingRegions = comments
+                    .map(function (c) { return c.region; })
+                    .filter(function (r) { return r != null; });
+                redraw(regionState);
+            })
                 .catch(function () {
-                    showServerDown("Bugshot server is unreachable. Existing comments could not be loaded.");
-                    commentStatus.textContent = "Existing comments could not be loaded.";
-                });
+                showServerDown("Bugshot server is unreachable. Existing comments could not be loaded.");
+                commentStatus.textContent = "Existing comments could not be loaded.";
+            });
         }
-
         function appendComment(comment) {
             var item = document.createElement("div");
             item.className = "comment-item";
             item.dataset.id = comment.id;
-
             var badge = document.createElement("span");
             badge.className = "region-badge";
             if (comment.region) {
@@ -2057,24 +1860,21 @@
                 item.addEventListener("mouseleave", function () {
                     setHighlightedSelection(regionState, null);
                 });
-            } else {
+            }
+            else {
                 badge.textContent = "⬚ image";
             }
             item.appendChild(badge);
-
             var bodyElement = document.createElement("span");
             bodyElement.className = "comment-body";
             bodyElement.textContent = comment.body;
-
             var actions = document.createElement("span");
             actions.className = "comment-actions";
-
             var editButton = document.createElement("button");
             editButton.textContent = "edit";
             editButton.addEventListener("click", function () {
                 beginInlineEdit(item, bodyElement, actions, comment, commentStatus);
             });
-
             var deleteButton = document.createElement("button");
             deleteButton.textContent = "delete";
             deleteButton.addEventListener("click", function () {
@@ -2082,28 +1882,25 @@
                     fetch("/api/comments/" + comment.id, { method: "DELETE" })
                         .then(requireOkResponse)
                         .then(function () {
-                            setServerReachable(true);
-                            commentStatus.textContent = "";
-                            item.remove();
-                            updateCommentsCountLink();
-                        })
+                        setServerReachable(true);
+                        commentStatus.textContent = "";
+                        item.remove();
+                        updateCommentsCountLink();
+                    })
                         .catch(function () {
-                            showServerDown("Bugshot server is unreachable. Comment was not deleted.");
-                            commentStatus.textContent = "Comment was not deleted.";
-                        });
+                        showServerDown("Bugshot server is unreachable. Comment was not deleted.");
+                        commentStatus.textContent = "Comment was not deleted.";
+                    });
                 }
             });
-
             actions.appendChild(editButton);
             actions.appendChild(deleteButton);
-
             if (comment.region) {
                 var modifyRegionButton = document.createElement("button");
                 modifyRegionButton.textContent = "modify region";
                 modifyRegionButton.addEventListener("click", function () {
                     beginRegionReplace(regionState, comment);
                 });
-
                 var removeRegionButton = document.createElement("button");
                 removeRegionButton.textContent = "remove region";
                 removeRegionButton.addEventListener("click", function () {
@@ -2118,37 +1915,33 @@
                         body: JSON.stringify({ body: comment.body, region: null }),
                     })
                         .then(function () {
-                            commentStatus.textContent = "";
-                            removeRegionFromState(regionState, oldRegion);
-                            comment.region = null;
-                            badge.textContent = "⬚ image";
-                            delete item.dataset.selectionId;
-                            modifyRegionButton.remove();
-                            removeRegionButton.remove();
-                        })
+                        commentStatus.textContent = "";
+                        removeRegionFromState(regionState, oldRegion);
+                        comment.region = null;
+                        badge.textContent = "⬚ image";
+                        delete item.dataset.selectionId;
+                        modifyRegionButton.remove();
+                        removeRegionButton.remove();
+                    })
                         .catch(function () {
-                            showServerDown("Bugshot server is unreachable. Region was not removed.");
-                            commentStatus.textContent = "Region was not removed.";
-                        });
+                        showServerDown("Bugshot server is unreachable. Region was not removed.");
+                        commentStatus.textContent = "Region was not removed.";
+                    });
                 });
-
                 actions.appendChild(modifyRegionButton);
                 actions.appendChild(removeRegionButton);
             }
-
             item.appendChild(bodyElement);
             item.appendChild(actions);
             commentsList.appendChild(item);
             updateCommentsCountLink();
         }
-
         function updateCommentsCountLink() {
             var count = commentsList.querySelectorAll(".comment-item").length;
             commentsLink.hidden = count === 0;
             commentsLink.textContent = count + " " + (count === 1 ? "comment" : "comments");
         }
     }
-
     function renderExpectedChangeSummary(unit) {
         if (!unit || !unit.vizdiff || !unit.vizdiff.expected_change) {
             return;
@@ -2156,89 +1949,72 @@
         var modeBar = document.getElementById("mode-bar");
         var summary = document.createElement("section");
         summary.className = "expected-change-summary";
-
         var label = document.createElement("div");
         label.className = "expected-change-label";
         label.textContent = "Expected change";
         summary.appendChild(label);
-
         var body = document.createElement("div");
         body.className = "expected-change-body";
         body.textContent = unit.vizdiff.expected_change;
         summary.appendChild(body);
-
         if (modeBar && modeBar.parentNode) {
             modeBar.parentNode.insertBefore(summary, modeBar.nextSibling);
         }
     }
-
     function createAssetCard(asset) {
         var card = document.createElement("section");
         card.className = "asset-card";
-
         var header = document.createElement("div");
         header.className = "asset-header";
-
         var title = document.createElement("div");
         title.className = "asset-title";
         title.textContent = asset.name;
         header.appendChild(title);
         card.appendChild(header);
-
         appendAssetPreview(card, asset, false);
         return card;
     }
-
     function renderMetadata(container, metadataItems) {
         if (!container) {
             return;
         }
-
         container.textContent = "";
         if (!metadataItems.length) {
             container.classList.add("is-hidden");
             return;
         }
-
         container.classList.remove("is-hidden");
-
         metadataItems.forEach(function (item) {
             var card = document.createElement("section");
             card.className = "metadata-card";
-
             var title = document.createElement("div");
             title.className = "metadata-title";
             title.textContent = item.name;
             card.appendChild(title);
-
             if (item.parse_error) {
                 var warning = document.createElement("div");
                 warning.className = "metadata-warning";
                 warning.textContent = item.parse_error;
                 card.appendChild(warning);
             }
-
             if (isRenderableMetadataTable(item.content)) {
                 card.appendChild(renderMetadataTable(item.content));
-            } else {
+            }
+            else {
                 var body = document.createElement("pre");
                 body.className = "metadata-body";
                 body.textContent = item.display_text;
                 card.appendChild(body);
             }
-
             container.appendChild(card);
         });
     }
-
     function isRenderableMetadataTable(content) {
         return content && typeof content === "object" && !Array.isArray(content);
     }
-
     function renderMetadataTable(content) {
         var table = document.createElement("table");
         table.className = "metadata-table";
-
         var head = document.createElement("thead");
         var headRow = document.createElement("tr");
         ["Field", "Value"].forEach(function (text) {
@@ -2248,33 +2024,27 @@
         });
         head.appendChild(headRow);
         table.appendChild(head);
-
         var body = document.createElement("tbody");
         Object.keys(content).forEach(function (key) {
             var row = document.createElement("tr");
-
             var keyCell = document.createElement("th");
             keyCell.className = "metadata-key";
             keyCell.textContent = key;
             row.appendChild(keyCell);
-
             var valueCell = document.createElement("td");
             valueCell.className = "metadata-value";
             appendMetadataValue(valueCell, content[key]);
             row.appendChild(valueCell);
-
             body.appendChild(row);
         });
         table.appendChild(body);
         return table;
     }
-
     function appendMetadataValue(cell, value) {
         if (value === null || typeof value === "undefined") {
             cell.textContent = "";
             return;
         }
-
         if (typeof value === "object") {
             var jsonValue = document.createElement("pre");
             jsonValue.className = "metadata-cell-json";
@@ -2282,16 +2052,13 @@
             cell.appendChild(jsonValue);
             return;
         }
-
         cell.textContent = String(value);
     }
-
     function bindInternalNavigation(link) {
         link.addEventListener("click", function () {
             isInternalNavigation = true;
         });
     }
-
     function createNavigationButton(config) {
         if (!config.destination) {
             var disabledButton = document.createElement("span");
@@ -2301,27 +2068,23 @@
             disabledButton.setAttribute("aria-disabled", "true");
             return disabledButton;
         }
-
         var link = document.createElement("a");
         link.href = config.destination;
         link.className = "btn";
         link.id = config.id;
-
         if (config.direction === "previous") {
             link.textContent = "\u2190 " + config.detailName;
-        } else {
+        }
+        else {
             link.textContent = config.detailName + " \u2192";
         }
-
         bindInternalNavigation(link);
         return link;
     }
-
     function navigateTo(path) {
         isInternalNavigation = true;
         window.location.href = path;
     }
-
     function getAvailableImages() {
         if (isIndex) {
             return window.__BUGSHOT_UNITS__ || [];
@@ -2331,22 +2094,18 @@
         }
         return [];
     }
-
     function navigateToImageByShortcut(key) {
         var units = getAvailableImages();
         if (!units.length) {
             return;
         }
-
         if (key === "0") {
             navigateTo("/view/" + units[units.length - 1].encoded_id);
             return;
         }
-
         var imageNumber = parseInt(key, 10);
         navigateToImageNumber(imageNumber);
     }
-
     function navigateToImageNumber(imageNumber) {
         var units = getAvailableImages();
         if (!units.length) {
@@ -2355,15 +2114,12 @@
         if (!Number.isInteger(imageNumber) || imageNumber < 1 || imageNumber > units.length) {
             return false;
         }
-
         navigateTo("/view/" + units[imageNumber - 1].encoded_id);
         return true;
     }
-
     function isJumpModalOpen() {
         return jumpModal && !jumpModal.classList.contains("is-hidden");
     }
-
     function openJumpModal() {
         if (!jumpModal) {
             return;
@@ -2374,7 +2130,6 @@
         jumpModalInput.focus();
         jumpModalInput.select();
     }
-
     function closeJumpModal() {
         if (!jumpModal) {
             return;
@@ -2382,61 +2137,50 @@
         jumpModal.classList.add("is-hidden");
         jumpModalError.textContent = "";
     }
-
     function submitJumpModal() {
         var rawValue = jumpModalInput.value.trim();
         var imageNumber = parseInt(rawValue, 10);
-
         if (!rawValue || !/^\d+$/.test(rawValue)) {
             jumpModalError.textContent = "Enter a valid unit number.";
             return;
         }
-
         if (!navigateToImageNumber(imageNumber)) {
             jumpModalError.textContent = "That unit number does not exist.";
             return;
         }
     }
-
     function handleJumpModalKeydown(event) {
         if (event.key === "Escape") {
             closeJumpModal();
             event.preventDefault();
             return;
         }
-
         if (event.key !== SHORTCUT_KEY_ENTER) {
             return;
         }
-
         submitJumpModal();
         event.preventDefault();
     }
-
     function copyFilenameToClipboard() {
         if (!isDetail || !currentUnit) {
             return;
         }
-
         writeClipboardText(currentUnit.id)
             .then(function () {
-                showCopyFilenameStatus("Copied", false);
-            })
+            showCopyFilenameStatus("Copied", false);
+        })
             .catch(function () {
-                showCopyFilenameStatus("Copy failed", true);
-            });
+            showCopyFilenameStatus("Copy failed", true);
+        });
     }
-
     function writeClipboardText(text) {
         if (navigator.clipboard && navigator.clipboard.writeText) {
             return navigator.clipboard.writeText(text).catch(function () {
                 return fallbackCopyText(text);
             });
         }
-
         return fallbackCopyText(text);
     }
-
     function fallbackCopyText(text) {
         return new Promise(function (resolve, reject) {
             var textArea = document.createElement("textarea");
@@ -2448,100 +2192,84 @@
             document.body.appendChild(textArea);
             textArea.focus();
             textArea.select();
-
             try {
                 if (document.execCommand("copy")) {
                     resolve();
-                } else {
+                }
+                else {
                     reject(new Error("Copy command failed"));
                 }
-            } catch (error) {
+            }
+            catch (error) {
                 reject(error);
-            } finally {
+            }
+            finally {
                 document.body.removeChild(textArea);
             }
         });
     }
-
     function showCopyFilenameStatus(message, isError) {
         var status = document.getElementById("copy-filename-status");
         if (!status) {
             return;
         }
-
         status.textContent = message;
         status.classList.toggle("is-error", isError);
-
         if (copyFilenameStatusTimeout) {
             clearTimeout(copyFilenameStatusTimeout);
         }
-
         copyFilenameStatusTimeout = setTimeout(function () {
             status.textContent = "";
             status.classList.remove("is-error");
         }, 2000);
     }
-
     function toggleIndexSize() {
         if (!isIndex) {
             return;
         }
-
         var gallery = document.getElementById("gallery");
         var sizeToggle = document.getElementById("size-toggle");
         var isFullSize = gallery.classList.contains("fullsize-mode");
         var nextFullSizeState = !isFullSize;
-
         gallery.classList.toggle("thumbnail-mode", !nextFullSizeState);
         gallery.classList.toggle("fullsize-mode", nextFullSizeState);
         sizeToggle.textContent = nextFullSizeState ? "Thumbnails" : "Full Size";
     }
-
     function focusCommentInput() {
         var input = document.getElementById("comment-input");
         if (input) {
             input.focus();
         }
     }
-
     function beginInlineEdit(item, bodyElement, actions, comment, commentStatus) {
         if (item.classList.contains("is-editing")) {
             return;
         }
         item.classList.add("is-editing");
-
         var originalBody = comment.body;
         var editor = document.createElement("textarea");
         editor.className = "comment-edit-input";
         editor.value = originalBody;
         editor.rows = Math.min(6, Math.max(1, originalBody.split("\n").length));
-
         var editActions = document.createElement("span");
         editActions.className = "comment-edit-actions";
-
         var saveButton = document.createElement("button");
         saveButton.type = "button";
         saveButton.textContent = "save";
-
         var cancelButton = document.createElement("button");
         cancelButton.type = "button";
         cancelButton.textContent = "cancel";
-
         editActions.appendChild(saveButton);
         editActions.appendChild(cancelButton);
-
         bodyElement.replaceWith(editor);
         actions.replaceWith(editActions);
-
         editor.focus();
         editor.setSelectionRange(editor.value.length, editor.value.length);
-
         function restore() {
             editor.replaceWith(bodyElement);
             editActions.replaceWith(actions);
             item.classList.remove("is-editing");
         }
-
         function save() {
             var nextBody = editor.value.trim();
             if (!nextBody || nextBody === originalBody) {
@@ -2556,26 +2284,26 @@
                 body: JSON.stringify({ body: nextBody }),
             })
                 .then(function (updated) {
-                    commentStatus.textContent = "";
-                    bodyElement.textContent = updated.body;
-                    comment.body = updated.body;
-                    restore();
-                })
+                commentStatus.textContent = "";
+                bodyElement.textContent = updated.body;
+                comment.body = updated.body;
+                restore();
+            })
                 .catch(function () {
-                    showServerDown("Bugshot server is unreachable. Comment edit was not saved.");
-                    commentStatus.textContent = "Comment edit was not saved.";
-                    saveButton.disabled = false;
-                    cancelButton.disabled = false;
-                });
+                showServerDown("Bugshot server is unreachable. Comment edit was not saved.");
+                commentStatus.textContent = "Comment edit was not saved.";
+                saveButton.disabled = false;
+                cancelButton.disabled = false;
+            });
         }
-
         saveButton.addEventListener("click", save);
         cancelButton.addEventListener("click", restore);
         editor.addEventListener("keydown", function (event) {
             if (event.key === "Escape") {
                 event.preventDefault();
                 restore();
-            } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            }
+            else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
                 event.preventDefault();
                 save();
             }

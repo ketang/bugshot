@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import sys
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
@@ -20,6 +21,8 @@ def load_build_plugin(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod, "ROOT", tmp_path)
     monkeypatch.setattr(mod, "VERSION_FILE", version_file)
+    mod._real_compile_frontend = mod.compile_frontend
+    monkeypatch.setattr(mod, "compile_frontend", lambda verbose=False: None)
     return mod
 
 
@@ -63,6 +66,8 @@ def setup_source_files(tmp_path: Path) -> None:
     for name in SHARED_SKILL_PYTHON_FILES:
         (tmp_path / name).write_text(f"# {name}\n")
     (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "gallery.ts").write_text("(() => {})();\n")
+    (tmp_path / "static" / "gallery.js").write_text("stale js\n")
     (tmp_path / "static" / "style.css").write_text("")
     (tmp_path / "templates").mkdir()
     (tmp_path / "templates" / "index.html").write_text("")
@@ -103,6 +108,27 @@ def test_build_generates_skill_dir(tmp_path, monkeypatch):
         assert (skill_dir / name).exists(), f"missing {name} in skills/bugshot/"
     assert (skill_dir / "static").is_dir()
     assert (skill_dir / "templates").is_dir()
+
+
+def test_build_compiles_gallery_typescript_before_copying_skills(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    calls = []
+
+    def fake_run(command, cwd, check):
+        calls.append((command, cwd, check))
+        (tmp_path / "static" / "gallery.js").write_text("compiled js\n")
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mod, "compile_frontend", mod._real_compile_frontend)
+    monkeypatch.setattr(sys, "argv", ["build-plugin"])
+    mod.main()
+
+    assert calls == [(["npm", "run", "build:frontend"], tmp_path, True)]
+    assert (tmp_path / "static" / "gallery.js").read_text() == "compiled js\n"
+    assert (tmp_path / "skills" / "bugshot" / "static" / "gallery.js").read_text() == "compiled js\n"
+    assert not (tmp_path / "skills" / "bugshot" / "static" / "gallery.ts").exists()
 
 
 def test_build_generates_vizline_skill(tmp_path, monkeypatch):
