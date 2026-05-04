@@ -184,7 +184,32 @@ def test_codex_manifest_points_at_skills_root(tmp_path, monkeypatch):
     mod.main()
 
     codex = json.loads((tmp_path / ".codex-plugin" / "plugin.json").read_text())
-    assert codex["skills"] == "./skills"
+    assert codex["skills"] == "./.codex-plugin/skills"
+
+
+def test_build_generates_agent_specific_skill_payloads(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    skill_dir = tmp_path / "skills" / "bugshot"
+    skill_dir.joinpath("SKILL.md").write_text("canonical skill\n")
+    overlay_dir = skill_dir / "overlays"
+    overlay_dir.mkdir()
+    overlay_dir.joinpath("codex.md").write_text("codex overlay\n")
+    overlay_dir.joinpath("claude.md").write_text("claude overlay\n")
+
+    monkeypatch.setattr(sys, "argv", ["build-plugin"])
+    mod.main()
+
+    canonical = skill_dir.joinpath("SKILL.md").read_text()
+    codex = tmp_path.joinpath(".codex-plugin", "skills", "bugshot", "SKILL.md").read_text()
+    claude = tmp_path.joinpath(".claude", "skills", "bugshot.md").read_text()
+
+    assert canonical == "canonical skill\n"
+    assert codex == "canonical skill\n\ncodex overlay\n"
+    assert claude == "canonical skill\n\nclaude overlay\n"
+    assert "claude overlay" not in codex
+    assert "codex overlay" not in claude
+    assert tmp_path.joinpath(".codex-plugin", "skills", "bugshot", "bugshot_cli.py").exists()
 
 
 def test_build_generates_assets(tmp_path, monkeypatch):

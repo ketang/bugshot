@@ -16,15 +16,18 @@ def create_source_tree(root: Path) -> None:
                 "name": "bugshot",
                 "version": "1.0.0",
                 "description": "Test plugin",
-                "skills": "./skills",
+                "skills": "./.codex-plugin/skills",
             }
         )
         + "\n"
     )
+    codex_skill_dir = codex_manifest_dir / "skills" / "bugshot"
+    codex_skill_dir.mkdir(parents=True)
+    (codex_skill_dir / "SKILL.md").write_text("---\nname: bugshot\n---\nCodex skill\n")
 
     skill_dir = root / "skills" / "bugshot"
     skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text("---\nname: bugshot\n---\n")
+    (skill_dir / "SKILL.md").write_text("---\nname: bugshot\n---\nCanonical skill\n")
 
     assets_dir = root / "assets"
     assets_dir.mkdir()
@@ -88,7 +91,8 @@ def test_installer_writes_local_marketplace(tmp_path: Path) -> None:
 
     plugin_root = marketplace / "plugins" / "bugshot"
     assert (plugin_root / ".codex-plugin" / "plugin.json").is_file()
-    assert (plugin_root / "skills" / "bugshot" / "SKILL.md").is_file()
+    assert (plugin_root / ".codex-plugin" / "skills" / "bugshot" / "SKILL.md").is_file()
+    assert not (plugin_root / "skills").exists()
     assert (plugin_root / "assets" / "icon.png").is_file()
     assert (plugin_root / "plugin-version.json").is_file()
     assert (plugin_root / "INSTALL.md").is_file()
