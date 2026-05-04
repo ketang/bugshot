@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bugshot — {{unit_label}}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header class="detail-header">
+        <nav class="detail-nav">
+            <div class="detail-nav-slot detail-nav-left">
+                <span id="prev-slot"></span>
+            </div>
+            <div class="detail-nav-slot detail-nav-center detail-nav-toolbar">
+                <a href="/" class="btn" id="index-btn">Index</a>
+                <div id="detail-theme-controls" class="theme-controls"></div>
+            </div>
+            <div class="detail-nav-slot detail-nav-right">
+                <span id="next-slot"></span>
+            </div>
+        </nav>
+    </header>
+    <main class="detail-main">
+        {{shortcut_legend_html}}
+        <div id="mode-bar" class="mode-bar" hidden>
+            <span class="mode-bar-label">Mode:</span>
+            <div class="mode-button-group" role="radiogroup">
+                <button type="button" class="mode-button" data-mode="side-by-side">Side-by-side</button>
+                <button type="button" class="mode-button" data-mode="swipe">Swipe</button>
+                <button type="button" class="mode-button" data-mode="onion">Onion</button>
+                <button type="button" class="mode-button" data-mode="diff">Diff image</button>
+            </div>
+            <span class="mode-bar-spacer"></span>
+            <label class="mode-bar-toggle">
+                <input type="checkbox" id="overlay-toggle">
+                <span>Diff pixel overlay</span>
+            </label>
+        </div>
+        <div id="viewer-pane" class="viewer-pane" hidden></div>
+        <div class="detail-tools" id="detail-tools" hidden>
+            <span class="detail-tools-label">Tool:</span>
+            <div class="tool-segmented" role="radiogroup" aria-label="Drawing tool">
+                <button type="button" class="btn-tool" data-tool="off" role="radio" aria-pressed="true" aria-checked="true" title="Off (no drawing)"><span class="btn-tool-icon" aria-hidden="true">⊘</span><span class="btn-tool-label">Off</span></button>
+                <button type="button" class="btn-tool" data-tool="rect" role="radio" aria-pressed="false" aria-checked="false" title="Rectangle (▭)"><span class="btn-tool-icon" aria-hidden="true">▭</span><span class="btn-tool-label">Rect</span></button>
+                <button type="button" class="btn-tool" data-tool="ellipse" role="radio" aria-pressed="false" aria-checked="false" title="Ellipse (◯)"><span class="btn-tool-icon" aria-hidden="true">◯</span><span class="btn-tool-label">Ellipse</span></button>
+                <button type="button" class="btn-tool" data-tool="path" role="radio" aria-pressed="false" aria-checked="false" title="Freehand (✎)"><span class="btn-tool-icon" aria-hidden="true">✎</span><span class="btn-tool-label">Freehand</span></button>
+            </div>
+            <span class="pending-region-indicator" id="pending-region-indicator" hidden>
+                <span class="pending-region-label">Region: <span id="pending-region-type">rect</span> attached</span>
+                <button type="button" class="btn-cancel-region" id="cancel-pending-region" title="Discard pending region">×</button>
+            </span>
+            <span class="pending-region-indicator" id="replace-region-indicator" hidden>
+                <span class="pending-region-label">Replacing region for <span id="replace-region-target">Selection</span> — draw new region</span>
+                <button type="button" class="btn-cancel-region" id="cancel-replace-region" title="Cancel replace (Esc)">×</button>
+            </span>
+        </div>
+        <div class="feedback-composer">
+            <form id="comment-form">
+                <input type="text" id="comment-input" placeholder="Describe an issue..." autocomplete="off">
+                <button type="submit" class="btn">Submit</button>
+            </form>
+        </div>
+        <div class="detail-content">
+            <div id="unit-assets" class="unit-assets">
+                <!-- Unit assets injected by gallery.js -->
+            </div>
+            <div class="detail-filename-row">
+                <span class="detail-filename" id="detail-filename">{{unit_label}}</span>
+                <button id="copy-filename-btn" class="btn btn-copy-filename" type="button" title="Copy unit id (c)">
+                    <svg class="copy-filename-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M16 4h-2.18A3 3 0 0 0 11 2H9a3 3 0 0 0-2.82 2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm-7-1h2a1 1 0 0 1 .95.68l.29.82H7.76l.29-.82A1 1 0 0 1 9 3Zm7 15H4V6h12v12Zm4-10v12a2 2 0 0 1-2 2H7v-2h11V8h2Z"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
+                <span id="copy-filename-status" class="copy-filename-status" aria-live="polite"></span>
+            </div>
+        </div>
+        <div class="comment-section">
+            <div id="comments-list">
+                <!-- Populated by gallery.js -->
+            </div>
+        </div>
+        <div id="unit-metadata" class="unit-metadata">
+            <!-- Unit metadata injected by gallery.js -->
+        </div>
+        <div class="detail-actions">
+            <button id="detail-done-btn" class="btn btn-done">Done Reviewing</button>
+        </div>
+    </main>
+    <script>
+        window.__BUGSHOT_DETAIL__ = {
+            unit: {{unit_json}},
+            units: {{units_json}},
+            nav: {{nav_json}}
+        };
+    </script>
+    <script src="/static/gallery.js"></script>
+</body>
+</html>

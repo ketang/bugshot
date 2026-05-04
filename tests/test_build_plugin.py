@@ -63,6 +63,8 @@ def setup_source_files(tmp_path: Path) -> None:
         skill_dir = tmp_path / "skills" / skill_name
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(f"---\nname: {skill_name}\n---\n")
+        if skill_name == "bugshot":
+            (skill_dir / "select-bind-address").write_text("#!/bin/sh\n")
     for name in SHARED_SKILL_PYTHON_FILES:
         (tmp_path / name).write_text(f"# {name}\n")
     (tmp_path / "static").mkdir()
@@ -177,7 +179,7 @@ def test_build_preserves_each_skill_md(tmp_path, monkeypatch):
         assert actual == body, f"build-plugin clobbered skills/{skill_name}/SKILL.md"
 
 
-def test_codex_manifest_points_at_skills_root(tmp_path, monkeypatch):
+def test_codex_manifest_points_at_generated_codex_skills(tmp_path, monkeypatch):
     mod = load_build_plugin(tmp_path, monkeypatch)
     setup_source_files(tmp_path)
     monkeypatch.setattr(sys, "argv", ["build-plugin"])
@@ -192,6 +194,7 @@ def test_build_generates_agent_specific_skill_payloads(tmp_path, monkeypatch):
     setup_source_files(tmp_path)
     skill_dir = tmp_path / "skills" / "bugshot"
     skill_dir.joinpath("SKILL.md").write_text("canonical skill\n")
+    skill_dir.joinpath("select-bind-address").write_text("#!/bin/sh\n")
     overlay_dir = skill_dir / "overlays"
     overlay_dir.mkdir()
     overlay_dir.joinpath("codex.md").write_text("codex overlay\n")
@@ -210,6 +213,7 @@ def test_build_generates_agent_specific_skill_payloads(tmp_path, monkeypatch):
     assert "claude overlay" not in codex
     assert "codex overlay" not in claude
     assert tmp_path.joinpath(".codex-plugin", "skills", "bugshot", "bugshot_cli.py").exists()
+    assert tmp_path.joinpath(".codex-plugin", "skills", "bugshot", "select-bind-address").exists()
 
 
 def test_build_generates_assets(tmp_path, monkeypatch):

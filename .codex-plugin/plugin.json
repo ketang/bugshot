@@ -1,6 +1,6 @@
 {
   "name": "bugshot",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "Ephemeral screenshot gallery for visual bug review and issue filing",
   "author": {
     "name": "Ketan Gangatirkar",
@@ -17,7 +17,7 @@
     "visual-review",
     "qa"
   ],
-  "skills": "./skills",
+  "skills": "./.codex-plugin/skills",
   "interface": {
     "displayName": "Bugshot",
     "shortDescription": "Visual bug review and issue filing",

@@ -1,8 +1,9 @@
 # Installing Bugshot For Codex
 
 Bugshot ships as a Codex plugin through `.codex-plugin/plugin.json` and the
-`skills/` directory. The installer creates a local Codex marketplace, copies
-the built plugin payload into it, and registers that marketplace with Codex.
+generated `.codex-plugin/skills/` payload. The installer creates a local Codex
+marketplace, copies the built plugin payload into it, and registers that
+marketplace with Codex.
 
 ## Requirements
 
