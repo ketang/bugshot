@@ -1,6 +1,8 @@
 interface Window {
     __BUGSHOT_UNITS__?: GalleryIndexUnit[];
     __BUGSHOT_DETAIL__?: DetailPagePayload;
+    __BUGSHOT_ENABLE_TEST_HOOKS__?: boolean;
+    __BUGSHOT_TEST__?: GalleryTestHooks;
 }
 
 interface GalleryIndexUnit {
@@ -118,6 +120,19 @@ interface RegionState {
     highlightedSelectionId: number | null;
     assetCard: HTMLElement | null;
     replaceTarget: { comment: GalleryComment } | null;
+}
+
+interface GalleryTestHooks {
+    pointFromEvent(state: Pick<RegionState, "overlay">, event: MouseEvent): Point;
+    buildCommittedRegion(drawState: DrawState): Region | null;
+    commitDrawState(state: RegionState): void;
+    beginInlineEdit(
+        item: HTMLElement,
+        bodyElement: HTMLElement,
+        actions: HTMLElement,
+        comment: GalleryComment,
+        commentStatus: HTMLElement,
+    ): void;
 }
 
 (function () {
@@ -1592,7 +1607,7 @@ interface RegionState {
         return value;
     }
 
-    function pointFromEvent(state: RegionState, event: MouseEvent): Point {
+    function pointFromEvent(state: Pick<RegionState, "overlay">, event: MouseEvent): Point {
         var rect = state.overlay.getBoundingClientRect();
         return [
             clampUnit((event.clientX - rect.left) / rect.width),
@@ -2626,7 +2641,13 @@ interface RegionState {
         }
     }
 
-    function beginInlineEdit(item, bodyElement, actions, comment, commentStatus) {
+    function beginInlineEdit(
+        item: HTMLElement,
+        bodyElement: HTMLElement,
+        actions: HTMLElement,
+        comment: GalleryComment,
+        commentStatus: HTMLElement,
+    ) {
         if (item.classList.contains("is-editing")) {
             return;
         }
@@ -2702,5 +2723,14 @@ interface RegionState {
                 save();
             }
         });
+    }
+
+    if (window.__BUGSHOT_ENABLE_TEST_HOOKS__) {
+        window.__BUGSHOT_TEST__ = {
+            pointFromEvent: pointFromEvent,
+            buildCommittedRegion: buildCommittedRegion,
+            commitDrawState: commitDrawState,
+            beginInlineEdit: beginInlineEdit,
+        };
     }
 })();

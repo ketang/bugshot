@@ -2309,4 +2309,12 @@
             }
         });
     }
+    if (window.__BUGSHOT_ENABLE_TEST_HOOKS__) {
+        window.__BUGSHOT_TEST__ = {
+            pointFromEvent: pointFromEvent,
+            buildCommittedRegion: buildCommittedRegion,
+            commitDrawState: commitDrawState,
+            beginInlineEdit: beginInlineEdit,
+        };
+    }
 })();
