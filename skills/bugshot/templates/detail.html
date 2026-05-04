@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <header>
+    <header class="detail-header">
         <nav class="detail-nav">
             <div class="detail-nav-slot detail-nav-left">
                 <span id="prev-slot"></span>
@@ -50,6 +50,16 @@
                 <span class="pending-region-label">Region: <span id="pending-region-type">rect</span> attached</span>
                 <button type="button" class="btn-cancel-region" id="cancel-pending-region" title="Discard pending region">×</button>
             </span>
+            <span class="pending-region-indicator" id="replace-region-indicator" hidden>
+                <span class="pending-region-label">Replacing region for <span id="replace-region-target">Selection</span> — draw new region</span>
+                <button type="button" class="btn-cancel-region" id="cancel-replace-region" title="Cancel replace (Esc)">×</button>
+            </span>
+        </div>
+        <div class="feedback-composer">
+            <form id="comment-form">
+                <input type="text" id="comment-input" placeholder="Describe an issue..." autocomplete="off">
+                <button type="submit" class="btn">Submit</button>
+            </form>
         </div>
         <div class="detail-content">
             <div id="unit-assets" class="unit-assets">
@@ -67,10 +77,6 @@
             </div>
         </div>
         <div class="comment-section">
-            <form id="comment-form">
-                <input type="text" id="comment-input" placeholder="Describe an issue..." autocomplete="off">
-                <button type="submit" class="btn">Submit</button>
-            </form>
             <div id="comments-list">
                 <!-- Populated by gallery.js -->
             </div>

@@ -395,6 +395,10 @@ VIZDIFF_SCHEMA = "bugshot.vizdiff/v1"
 VIZDIFF_FIELDS = (
     "classification",
     "relative_path",
+    "surface",
+    "expected_change",
+    "branch",
+    "changeset",
     "base_asset",
     "head_asset",
     "base_sha256",

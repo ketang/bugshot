@@ -395,6 +395,10 @@ VIZDIFF_SCHEMA = "bugshot.vizdiff/v1"
 VIZDIFF_FIELDS = (
     "classification",
     "relative_path",
+    "surface",
+    "expected_change",
+    "branch",
+    "changeset",
     "base_asset",
     "head_asset",
     "base_sha256",
@@ -487,6 +491,7 @@ _SHORTCUT_LEGEND_ROW_NAVIGATION = [
     ("n/.", "next"),
     ("p/,", "previous"),
     ("i", "index"),
+    ("t", "theme"),
 ]
 
 _SHORTCUT_LEGEND_ROW_ACTIONS_GROUPED = [

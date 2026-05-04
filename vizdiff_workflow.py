@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import os
 import shutil
 import threading
@@ -20,6 +21,9 @@ import vizline_workflow  # for VizlineError, _rev_parse, lock helpers
 
 class VizdiffError(Exception):
     pass
+
+
+MANIFEST_SCHEMA = "bugshot.vizdiff-manifest/v1"
 
 
 def build_review_root(
@@ -104,6 +108,179 @@ def build_review_root(
         return review_root
     finally:
         os.close(fd)
+
+
+def build_review_root_from_manifest(
+    manifest_path: Path,
+    *,
+    out_dir: Path | None = None,
+) -> Path:
+    """Assemble a vizdiff review root from a non-interactive handoff manifest."""
+    manifest_path = Path(manifest_path).resolve()
+    manifest = _read_handoff_manifest(manifest_path)
+    manifest_dir = manifest_path.parent
+    review_root = Path(out_dir) if out_dir is not None else manifest_dir / "review-root"
+    if review_root.exists():
+        shutil.rmtree(review_root)
+    review_root.mkdir(parents=True)
+
+    for surface in manifest["surfaces"]:
+        _assemble_manifest_surface(
+            review_root=review_root,
+            manifest_dir=manifest_dir,
+            manifest=manifest,
+            surface=surface,
+        )
+
+    return review_root
+
+
+def _read_handoff_manifest(manifest_path: Path) -> dict:
+    try:
+        with manifest_path.open("r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError) as error:
+        raise VizdiffError(f"Invalid vizdiff manifest {manifest_path}: {error}") from error
+
+    if not isinstance(manifest, dict):
+        raise VizdiffError("Invalid vizdiff manifest: root must be an object")
+    schema = manifest.get("schema")
+    if schema not in {None, MANIFEST_SCHEMA}:
+        raise VizdiffError(f"Unsupported vizdiff manifest schema: {schema}")
+
+    for field in ("branch", "base_sha", "head_sha"):
+        _require_string(manifest, field, f"manifest {field}")
+
+    base_ref = manifest.get("base_ref")
+    if base_ref is not None and not isinstance(base_ref, str):
+        raise VizdiffError("Invalid vizdiff manifest: base_ref must be a string")
+
+    changeset = manifest.get("changeset")
+    if changeset is not None and not isinstance(changeset, dict):
+        raise VizdiffError("Invalid vizdiff manifest: changeset must be an object")
+
+    surfaces = manifest.get("surfaces")
+    if not isinstance(surfaces, list) or not surfaces:
+        raise VizdiffError("Invalid vizdiff manifest: surfaces must be a non-empty list")
+
+    for index, surface in enumerate(surfaces):
+        if not isinstance(surface, dict):
+            raise VizdiffError(f"Invalid vizdiff manifest: surface {index} must be an object")
+        _require_string(surface, "name", f"surface {index} name")
+        base_path = _surface_path(surface, "base")
+        head_path = _surface_path(surface, "head")
+        if base_path is None and head_path is None:
+            raise VizdiffError(
+                f"Invalid vizdiff manifest: surface {index} must include base_png or head_png"
+            )
+        expected_change = surface.get("expected_change")
+        if expected_change is not None and not isinstance(expected_change, str):
+            raise VizdiffError(
+                f"Invalid vizdiff manifest: surface {index} expected_change must be a string"
+            )
+
+    return manifest
+
+
+def _require_string(obj: dict, field: str, label: str) -> str:
+    value = obj.get(field)
+    if not isinstance(value, str) or not value:
+        raise VizdiffError(f"Invalid vizdiff manifest: {label} must be a non-empty string")
+    return value
+
+
+def _surface_path(surface: dict, side: str) -> str | None:
+    value = surface.get(f"{side}_png", surface.get(side))
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise VizdiffError(
+            f"Invalid vizdiff manifest: {surface.get('name', 'surface')} {side}_png "
+            "must be a non-empty string"
+        )
+    return value
+
+
+def _assemble_manifest_surface(
+    *,
+    review_root: Path,
+    manifest_dir: Path,
+    manifest: dict,
+    surface: dict,
+) -> None:
+    unit_id = vizdiff_review_root.unit_id_for(surface["name"])
+    unit_dir = review_root / unit_id
+    unit_dir.mkdir(parents=True)
+
+    base_source = _resolve_manifest_asset(manifest_dir, _surface_path(surface, "base"))
+    head_source = _resolve_manifest_asset(manifest_dir, _surface_path(surface, "head"))
+    base_asset = _copy_manifest_asset(base_source, unit_dir, "reference")
+    head_asset = _copy_manifest_asset(head_source, unit_dir, "candidate")
+    assets = [name for name in (base_asset, head_asset) if name is not None]
+
+    metadata = {
+        "schema": vizdiff_review_root.VIZDIFF_SCHEMA,
+        "classification": _manifest_classification(base_source, head_source),
+        "relative_path": surface["name"],
+        "surface": surface["name"],
+        "expected_change": surface.get("expected_change"),
+        "branch": manifest["branch"],
+        "base_ref": manifest.get("base_ref", ""),
+        "base_sha": manifest["base_sha"],
+        "head_sha": manifest["head_sha"],
+        "changeset": manifest.get("changeset"),
+        "base_asset": base_asset,
+        "head_asset": head_asset,
+        "base_sha256": image_diff.sha256_file(base_source) if base_source else None,
+        "head_sha256": image_diff.sha256_file(head_source) if head_source else None,
+    }
+    unit_manifest = {
+        "label": surface["name"],
+        "assets": assets,
+        "metadata": ["bugshot-metadata.json"],
+    }
+    if base_asset is not None:
+        unit_manifest["reference_asset"] = base_asset
+
+    (unit_dir / "bugshot-unit.json").write_text(
+        json.dumps(unit_manifest, indent=2) + "\n", encoding="utf-8",
+    )
+    (unit_dir / "bugshot-metadata.json").write_text(
+        json.dumps(metadata, indent=2) + "\n", encoding="utf-8",
+    )
+
+
+def _resolve_manifest_asset(manifest_dir: Path, value: str | None) -> Path | None:
+    if value is None:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        path = manifest_dir / path
+    path = path.resolve()
+    if not path.is_file():
+        raise VizdiffError(f"Manifest asset does not exist: {value}")
+    ext = path.suffix.lower()
+    if ext not in image_diff.RECOGNIZED_EXTS:
+        raise VizdiffError(f"Manifest asset has unsupported extension: {value}")
+    return path
+
+
+def _copy_manifest_asset(source: Path | None, unit_dir: Path, stem: str) -> str | None:
+    if source is None:
+        return None
+    asset_name = f"{stem}{source.suffix.lower()}"
+    shutil.copy2(source, unit_dir / asset_name)
+    return asset_name
+
+
+def _manifest_classification(base_source: Path | None, head_source: Path | None) -> str:
+    if base_source is None:
+        return "added"
+    if head_source is None:
+        return "removed"
+    base_sha = image_diff.sha256_file(base_source)
+    head_sha = image_diff.sha256_file(head_source)
+    return "unchanged" if base_sha == head_sha else "changed"
 
 
 def _resolve_baseline_source(

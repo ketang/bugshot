@@ -1112,6 +1112,33 @@ header h1 {
     color: var(--text-soft);
 }
 
+.item-expected-change {
+    margin-top: 0.45rem;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+}
+
+.expected-change-summary {
+    margin: 0 1rem 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-elevated);
+}
+
+.expected-change-label {
+    margin-bottom: 0.35rem;
+    color: var(--text-soft);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+}
+
+.expected-change-body {
+    color: var(--text);
+    line-height: 1.45;
+}
+
 .vizdiff-swipe-wrap,
 .vizdiff-onion-wrap,
 .vizdiff-diff-wrap {

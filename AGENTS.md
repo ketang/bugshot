@@ -31,6 +31,9 @@ Binds to `0.0.0.0` by default (reachable from other hosts). Pass `--local-only` 
 Input-format details for upstream producers live in
 `docs/specs/2026-04-24-review-units.md`.
 
+Non-interactive visual-diff handoff manifests for `vizdiff --manifest` are
+documented in `docs/specs/2026-05-01-vizdiff-manifest.md`.
+
 ## Project Structure
 
 - `bugshot_cli.py` — CLI entry point; orchestrates a review session.

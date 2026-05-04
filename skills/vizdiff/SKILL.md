@@ -11,7 +11,8 @@ arguments:
 
 Capture HEAD screenshots, classify against `.bugshot/baseline/`, assemble a
 grouped review root under `.bugshot/review-root/`, open the bugshot gallery in
-diff mode, and emit issue drafts on stdout.
+diff mode, and emit issue drafts on stdout. Alternatively, consume a
+prewritten non-interactive manifest with `--manifest`.
 
 ## When to use
 
@@ -24,6 +25,9 @@ human-reviewed list of regressions / additions / removals before landing.
 - `.agent-plugins/bento/bugshot/viz/capture-command` must exist and be executable.
 - A baseline at `.bugshot/baseline/` (created via `bento:vizline`) is required
   unless `--head-only` or `--base-dir` is passed.
+- For manifest mode, none of the capture prerequisites are required. The
+  manifest contract is documented in
+  `docs/specs/2026-05-01-vizdiff-manifest.md`.
 
 ## Startup
 
@@ -35,6 +39,12 @@ human-reviewed list of regressions / additions / removals before landing.
    python3 {{vizdiff_dir}}/vizdiff_cli.py --json {{feature_worktree}}
    ```
 
+   If the user supplies a manifest instead of a feature worktree, run:
+
+   ```bash
+   python3 {{vizdiff_dir}}/vizdiff_cli.py --json --manifest {{manifest_path}}
+   ```
+
 4. Read the first line of the CLI's stderr — `Gallery is running at <url>`.
    Print the URL to the user. The gallery binds to `0.0.0.0` by default; pass
    `--local-only` for loopback-only.
@@ -44,6 +54,9 @@ human-reviewed list of regressions / additions / removals before landing.
 ## CLI flags
 
 - positional `feature_worktree` — required.
+- positional `feature_worktree` — required unless `--manifest` is supplied.
+- `--manifest <path>` — consume a non-interactive vizdiff manifest and open the
+  prebuilt review in the gallery.
 - `--base <ref>` — informational; used only in the no-baseline error message.
 - `--base-dir <path>` — bypass the baseline lookup; use this directory as the
   base side.
@@ -71,6 +84,8 @@ and it carries:
 - `base_asset`, `head_asset` — which asset filenames play which role.
 - `base_ref`, `base_sha`, `head_sha`.
 - `base_sha256`, `head_sha256`.
+- Manifest mode also preserves `branch`, `changeset`, and `expected_change`
+  when present.
 
 ## Sharp edges
 

@@ -17,6 +17,7 @@
     var SHORTCUT_KEY_TOGGLE_UNCHANGED = "u";
     var SHORTCUT_KEY_MODE_NEXT = "m";
     var SHORTCUT_KEY_MODE_PREV = "M";
+    var SHORTCUT_KEY_THEME = "t";
     var VIZDIFF_MODE_KEY = "bugshot:vizdiff:mode";
     var VIZDIFF_MODES = ["side-by-side", "swipe", "onion", "diff"];
     var SHORTCUT_KEY_CYCLE_TOOL = "d";
@@ -139,6 +140,12 @@
             return;
         }
 
+        if (event.key === "Escape" && currentRegionState && currentRegionState.replaceTarget) {
+            cancelRegionReplace(currentRegionState);
+            event.preventDefault();
+            return;
+        }
+
         var activeElement = document.activeElement;
         var isTyping = activeElement &&
             (activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA");
@@ -154,6 +161,9 @@
 
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
+            event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_THEME && !hasModifier) {
+            cycleTheme();
             event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_TOGGLE_UNCHANGED && isIndex && vizdiffActive) {
             toggleVizdiffUnchangedFilter();
@@ -268,22 +278,34 @@
             .forEach(function (container) {
                 container.textContent = "";
                 container.classList.add("theme-controls-ready");
+
+                var label = document.createElement("label");
+                label.className = "theme-select-control";
+
+                var labelText = document.createElement("span");
+                labelText.className = "theme-select-label";
+                labelText.textContent = "Theme";
+                label.appendChild(labelText);
+
+                var select = document.createElement("select");
+                select.className = "theme-select";
+                select.title = "Theme options";
+                select.setAttribute("aria-label", "Theme options");
                 THEME_ORDER.forEach(function (theme) {
-                    var button = document.createElement("button");
-                    button.type = "button";
-                    button.className = "theme-button";
-                    button.dataset.themeId = theme.id;
-                    button.title = theme.label;
-                    button.setAttribute("aria-label", theme.label);
-                    button.textContent = theme.label;
-                    button.addEventListener("click", function () {
-                        applyTheme(theme.id, true);
-                    });
-                    container.appendChild(button);
+                    var option = document.createElement("option");
+                    option.value = theme.id;
+                    option.textContent = theme.label;
+                    select.appendChild(option);
                 });
+                select.addEventListener("change", function () {
+                    applyTheme(select.value, true);
+                });
+
+                label.appendChild(select);
+                container.appendChild(label);
             });
 
-        syncThemeButtons();
+        syncThemeControls();
     }
 
     function loadThemeId() {
@@ -301,7 +323,7 @@
 
         currentTheme = themeId;
         document.body.dataset.theme = themeId;
-        syncThemeButtons();
+        syncThemeControls();
         rerenderSvgAssets();
 
         if (!persist) {
@@ -314,12 +336,22 @@
         }
     }
 
-    function syncThemeButtons() {
-        Array.prototype.slice.call(document.querySelectorAll(".theme-button")).forEach(function (button) {
-            var isActive = button.dataset.themeId === currentTheme;
-            button.classList.toggle("is-active", isActive);
-            button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    function syncThemeControls() {
+        Array.prototype.slice.call(document.querySelectorAll(".theme-select")).forEach(function (select) {
+            select.value = currentTheme;
         });
+    }
+
+    function cycleTheme() {
+        var currentIndex = 0;
+        for (var index = 0; index < THEME_ORDER.length; index += 1) {
+            if (THEME_ORDER[index].id === currentTheme) {
+                currentIndex = index;
+                break;
+            }
+        }
+        var nextTheme = THEME_ORDER[(currentIndex + 1) % THEME_ORDER.length];
+        applyTheme(nextTheme.id, true);
     }
 
     function findTheme(themeId) {
@@ -480,6 +512,13 @@
             meta.className = "item-meta";
             meta.textContent = describeUnit(unitInfo);
             item.appendChild(meta);
+
+            if (unitInfo.vizdiff && unitInfo.vizdiff.expected_change) {
+                var expected = document.createElement("div");
+                expected.className = "item-expected-change";
+                expected.textContent = unitInfo.vizdiff.expected_change;
+                item.appendChild(expected);
+            }
 
             gallery.appendChild(item);
         });
@@ -1309,6 +1348,7 @@
             imageElement: null,
             highlightedSelectionId: null,
             assetCard: null,
+            replaceTarget: null,
         };
 
         if (!unitSupportsRegionDrawing(unit)) {
@@ -1319,13 +1359,18 @@
         if (!toolbar) {
             return state;
         }
-        toolbar.hidden = false;
 
         var card = assetsContainer.querySelector(".asset-card");
         var image = card ? card.querySelector("img") : null;
         if (!card || !image) {
             return state;
         }
+
+        var assetHeader = card.querySelector(".asset-header");
+        if (assetHeader && toolbar.parentNode !== assetHeader) {
+            assetHeader.appendChild(toolbar);
+        }
+        toolbar.hidden = false;
 
         card.classList.add("has-region-overlay");
         state.imageElement = image;
@@ -1344,6 +1389,12 @@
             state.overlay.height = natH;
             state.overlay.style.width = image.clientWidth + "px";
             state.overlay.style.height = image.clientHeight + "px";
+            // The overlay is position:absolute inside .asset-card. The card has
+            // padding and a title row above the image, so inset:0 alone leaves
+            // the overlay misaligned — extending into the title at top and
+            // falling short of the image bottom. Pin it to the image's box.
+            state.overlay.style.left = image.offsetLeft + "px";
+            state.overlay.style.top = image.offsetTop + "px";
             state.ctx = state.overlay.getContext("2d");
             redraw(state);
         }
@@ -1379,6 +1430,13 @@
                 state.pendingRegion = null;
                 hidePendingIndicator();
                 redraw(state);
+            });
+        }
+
+        var cancelReplace = document.getElementById("cancel-replace-region");
+        if (cancelReplace) {
+            cancelReplace.addEventListener("click", function () {
+                cancelRegionReplace(state);
             });
         }
 
@@ -1542,29 +1600,120 @@
         if (!drawState) {
             return;
         }
+        var newRegion = buildCommittedRegion(drawState);
+        if (!newRegion) {
+            return;
+        }
+        if (state.replaceTarget) {
+            applyRegionReplace(state, newRegion);
+            return;
+        }
+        state.pendingRegion = newRegion;
+        showPendingIndicator(state.pendingRegion);
+        redraw(state);
+        focusCommentInput();
+    }
+
+    function buildCommittedRegion(drawState) {
         if (drawState.type === TOOL_RECT) {
             var preview = previewFromDrawState(drawState);
             if (preview.w < MIN_RECT_NORMALIZED_SIZE || preview.h < MIN_RECT_NORMALIZED_SIZE) {
-                return;
+                return null;
             }
-            state.pendingRegion = preview;
-        } else if (drawState.type === TOOL_ELLIPSE) {
+            return preview;
+        }
+        if (drawState.type === TOOL_ELLIPSE) {
             var ellipsePreview = previewFromDrawState(drawState);
             if (
                 ellipsePreview.rx < MIN_ELLIPSE_NORMALIZED_RADIUS ||
                 ellipsePreview.ry < MIN_ELLIPSE_NORMALIZED_RADIUS
             ) {
-                return;
+                return null;
             }
-            state.pendingRegion = ellipsePreview;
-        } else {
-            if (drawState.points.length < MIN_PATH_POINT_COUNT) {
-                return;
-            }
-            state.pendingRegion = { type: TOOL_PATH, points: drawState.points.slice() };
+            return ellipsePreview;
         }
-        showPendingIndicator(state.pendingRegion);
+        if (drawState.points.length < MIN_PATH_POINT_COUNT) {
+            return null;
+        }
+        return { type: TOOL_PATH, points: drawState.points.slice() };
+    }
+
+    function applyRegionReplace(state, newRegion) {
+        var target = state.replaceTarget;
+        if (!target) {
+            return;
+        }
+        var selectionId = target.comment.region && target.comment.region.selection_id;
+        if (selectionId != null) {
+            newRegion.selection_id = selectionId;
+        }
+        fetchJson("/api/comments/" + target.comment.id, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: target.comment.body, region: newRegion }),
+        })
+            .then(function () {
+                var oldRegion = target.comment.region;
+                target.comment.region = newRegion;
+                var idx = state.existingRegions.indexOf(oldRegion);
+                if (idx !== -1) {
+                    state.existingRegions[idx] = newRegion;
+                } else {
+                    state.existingRegions.push(newRegion);
+                }
+                state.replaceTarget = null;
+                hideReplaceIndicator();
+                redraw(state);
+            })
+            .catch(function () {
+                showServerDown("Bugshot server is unreachable. Region was not replaced.");
+            });
+    }
+
+    function beginRegionReplace(state, comment) {
+        state.pendingRegion = null;
+        hidePendingIndicator();
+        state.replaceTarget = { comment: comment };
+        if (state.activeTool === TOOL_OFF) {
+            setActiveTool(state, TOOL_RECT);
+        }
+        showReplaceIndicator(comment);
         redraw(state);
+    }
+
+    function cancelRegionReplace(state) {
+        if (!state.replaceTarget) {
+            return;
+        }
+        state.replaceTarget = null;
+        hideReplaceIndicator();
+        redraw(state);
+    }
+
+    function removeRegionFromState(state, region) {
+        var idx = state.existingRegions.indexOf(region);
+        if (idx !== -1) {
+            state.existingRegions.splice(idx, 1);
+        }
+        redraw(state);
+    }
+
+    function showReplaceIndicator(comment) {
+        var indicator = document.getElementById("replace-region-indicator");
+        var label = document.getElementById("replace-region-target");
+        if (indicator) {
+            indicator.hidden = false;
+        }
+        if (label && comment.region && comment.region.selection_id != null) {
+            label.textContent = "Selection " + comment.region.selection_id;
+        }
+    }
+
+    function hideReplaceIndicator() {
+        var indicator = document.getElementById("replace-region-indicator");
+        if (indicator) {
+            indicator.hidden = true;
+        }
     }
 
     function redraw(state) {
@@ -1752,6 +1901,7 @@
             assetsContainer.appendChild(createAssetCard(asset));
         });
 
+        renderExpectedChangeSummary(currentUnit);
         initVizdiffDetailModes(currentUnit);
         // The detail legend hardcodes a 'd cycle tool' entry server-side so
         // we can toggle it here using the same predicate that gates the 'd'
@@ -1797,6 +1947,13 @@
         var commentInput = document.getElementById("comment-input");
         var commentSubmit = commentForm.querySelector("button[type='submit']");
         var commentsList = document.getElementById("comments-list");
+        var commentsLink = document.createElement("a");
+        commentsLink.className = "comments-count-link";
+        commentsLink.href = "#comments-list";
+        commentsLink.hidden = true;
+        if (commentSubmit) {
+            commentSubmit.insertAdjacentElement("afterend", commentsLink);
+        }
         var selectionIdCounter = 0;
         var commentStatus = document.createElement("div");
         commentStatus.className = "comment-status";
@@ -1864,6 +2021,7 @@
                     commentStatus.textContent = "";
                     selectionIdCounter = 0;
                     comments.forEach(appendComment);
+                    updateCommentsCountLink();
                     regionState.existingRegions = comments
                         .map(function (c) { return c.region; })
                         .filter(function (r) { return r != null; });
@@ -1914,23 +2072,7 @@
             var editButton = document.createElement("button");
             editButton.textContent = "edit";
             editButton.addEventListener("click", function () {
-                var nextBody = prompt("Edit comment:", comment.body);
-                if (nextBody !== null && nextBody.trim()) {
-                    fetchJson("/api/comments/" + comment.id, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ body: nextBody.trim() }),
-                    })
-                        .then(function (updated) {
-                            commentStatus.textContent = "";
-                            bodyElement.textContent = updated.body;
-                            comment.body = updated.body;
-                        })
-                        .catch(function () {
-                            showServerDown("Bugshot server is unreachable. Comment edit was not saved.");
-                            commentStatus.textContent = "Comment edit was not saved.";
-                        });
-                }
+                beginInlineEdit(item, bodyElement, actions, comment, commentStatus);
             });
 
             var deleteButton = document.createElement("button");
@@ -1943,6 +2085,7 @@
                             setServerReachable(true);
                             commentStatus.textContent = "";
                             item.remove();
+                            updateCommentsCountLink();
                         })
                         .catch(function () {
                             showServerDown("Bugshot server is unreachable. Comment was not deleted.");
@@ -1953,9 +2096,79 @@
 
             actions.appendChild(editButton);
             actions.appendChild(deleteButton);
+
+            if (comment.region) {
+                var modifyRegionButton = document.createElement("button");
+                modifyRegionButton.textContent = "modify region";
+                modifyRegionButton.addEventListener("click", function () {
+                    beginRegionReplace(regionState, comment);
+                });
+
+                var removeRegionButton = document.createElement("button");
+                removeRegionButton.textContent = "remove region";
+                removeRegionButton.addEventListener("click", function () {
+                    if (!isServerReachable) {
+                        showServerDown("Bugshot server is unreachable. Region was not removed.");
+                        return;
+                    }
+                    var oldRegion = comment.region;
+                    fetchJson("/api/comments/" + comment.id, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ body: comment.body, region: null }),
+                    })
+                        .then(function () {
+                            commentStatus.textContent = "";
+                            removeRegionFromState(regionState, oldRegion);
+                            comment.region = null;
+                            badge.textContent = "⬚ image";
+                            delete item.dataset.selectionId;
+                            modifyRegionButton.remove();
+                            removeRegionButton.remove();
+                        })
+                        .catch(function () {
+                            showServerDown("Bugshot server is unreachable. Region was not removed.");
+                            commentStatus.textContent = "Region was not removed.";
+                        });
+                });
+
+                actions.appendChild(modifyRegionButton);
+                actions.appendChild(removeRegionButton);
+            }
+
             item.appendChild(bodyElement);
             item.appendChild(actions);
             commentsList.appendChild(item);
+            updateCommentsCountLink();
+        }
+
+        function updateCommentsCountLink() {
+            var count = commentsList.querySelectorAll(".comment-item").length;
+            commentsLink.hidden = count === 0;
+            commentsLink.textContent = count + " " + (count === 1 ? "comment" : "comments");
+        }
+    }
+
+    function renderExpectedChangeSummary(unit) {
+        if (!unit || !unit.vizdiff || !unit.vizdiff.expected_change) {
+            return;
+        }
+        var modeBar = document.getElementById("mode-bar");
+        var summary = document.createElement("section");
+        summary.className = "expected-change-summary";
+
+        var label = document.createElement("div");
+        label.className = "expected-change-label";
+        label.textContent = "Expected change";
+        summary.appendChild(label);
+
+        var body = document.createElement("div");
+        body.className = "expected-change-body";
+        body.textContent = unit.vizdiff.expected_change;
+        summary.appendChild(body);
+
+        if (modeBar && modeBar.parentNode) {
+            modeBar.parentNode.insertBefore(summary, modeBar.nextSibling);
         }
     }
 
@@ -1963,10 +2176,14 @@
         var card = document.createElement("section");
         card.className = "asset-card";
 
+        var header = document.createElement("div");
+        header.className = "asset-header";
+
         var title = document.createElement("div");
         title.className = "asset-title";
         title.textContent = asset.name;
-        card.appendChild(title);
+        header.appendChild(title);
+        card.appendChild(header);
 
         appendAssetPreview(card, asset, false);
         return card;
@@ -2285,5 +2502,83 @@
         if (input) {
             input.focus();
         }
+    }
+
+    function beginInlineEdit(item, bodyElement, actions, comment, commentStatus) {
+        if (item.classList.contains("is-editing")) {
+            return;
+        }
+        item.classList.add("is-editing");
+
+        var originalBody = comment.body;
+        var editor = document.createElement("textarea");
+        editor.className = "comment-edit-input";
+        editor.value = originalBody;
+        editor.rows = Math.min(6, Math.max(1, originalBody.split("\n").length));
+
+        var editActions = document.createElement("span");
+        editActions.className = "comment-edit-actions";
+
+        var saveButton = document.createElement("button");
+        saveButton.type = "button";
+        saveButton.textContent = "save";
+
+        var cancelButton = document.createElement("button");
+        cancelButton.type = "button";
+        cancelButton.textContent = "cancel";
+
+        editActions.appendChild(saveButton);
+        editActions.appendChild(cancelButton);
+
+        bodyElement.replaceWith(editor);
+        actions.replaceWith(editActions);
+
+        editor.focus();
+        editor.setSelectionRange(editor.value.length, editor.value.length);
+
+        function restore() {
+            editor.replaceWith(bodyElement);
+            editActions.replaceWith(actions);
+            item.classList.remove("is-editing");
+        }
+
+        function save() {
+            var nextBody = editor.value.trim();
+            if (!nextBody || nextBody === originalBody) {
+                restore();
+                return;
+            }
+            saveButton.disabled = true;
+            cancelButton.disabled = true;
+            fetchJson("/api/comments/" + comment.id, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ body: nextBody }),
+            })
+                .then(function (updated) {
+                    commentStatus.textContent = "";
+                    bodyElement.textContent = updated.body;
+                    comment.body = updated.body;
+                    restore();
+                })
+                .catch(function () {
+                    showServerDown("Bugshot server is unreachable. Comment edit was not saved.");
+                    commentStatus.textContent = "Comment edit was not saved.";
+                    saveButton.disabled = false;
+                    cancelButton.disabled = false;
+                });
+        }
+
+        saveButton.addEventListener("click", save);
+        cancelButton.addEventListener("click", restore);
+        editor.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                event.preventDefault();
+                restore();
+            } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                save();
+            }
+        });
     }
 })();
