@@ -104,6 +104,73 @@ def test_server_exposes_grouped_units(grouped_server):
     ]
 
 
+def test_grouped_unit_manifest_supports_asset_tooltips(tmp_path):
+    unit_dir = tmp_path / "tooltip-unit"
+    unit_dir.mkdir()
+    for name in ["reference.png", "candidate.png"]:
+        (unit_dir / name).write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x02\x00\x00\x00\x90wS\xde"
+            b"\x00\x00\x00\x0cIDATx"
+            b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+    (unit_dir / "bugshot-unit.json").write_text(
+        json.dumps(
+            {
+                "assets": ["reference.png", "candidate.png"],
+                "asset_tooltips": {
+                    "reference.png": "Baseline before the change",
+                    "candidate.png": "Current branch rendering",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    units = gallery_server.discover_review_units(str(tmp_path))
+    payload = gallery_server.unit_detail_payload(units[0], review_root=str(tmp_path))
+
+    assert [asset["tooltip"] for asset in units[0]["assets"]] == [
+        "Baseline before the change",
+        "Current branch rendering",
+    ]
+    assert [asset["tooltip"] for asset in payload["assets"]] == [
+        "Baseline before the change",
+        "Current branch rendering",
+    ]
+
+
+def test_asset_tooltip_must_name_declared_asset(tmp_path):
+    unit_dir = tmp_path / "broken-unit"
+    unit_dir.mkdir()
+    (unit_dir / "candidate.png").write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx"
+        b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    (unit_dir / "bugshot-unit.json").write_text(
+        json.dumps(
+            {
+                "assets": ["candidate.png"],
+                "asset_tooltips": {"reference.png": "Missing baseline"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    try:
+        gallery_server.discover_review_units(str(tmp_path))
+    except ValueError as error:
+        assert "asset_tooltips keys must name one of the unit assets" in str(error)
+    else:
+        raise AssertionError("Expected ValueError for unknown asset tooltip")
+
+
 def test_index_page_returns_200(server):
     resp = urllib.request.urlopen(f"{server.url}/")
     assert resp.status == 200
@@ -538,6 +605,14 @@ def test_gallery_js_wires_region_tool_shortcut(repo_root):
     assert 'unitSupportsRegionDrawing' in script
     assert 'pendingRegion' in script
     assert 'region-badge' in script
+
+
+def test_gallery_js_applies_asset_tooltips(repo_root):
+    script = open(f"{repo_root}/static/gallery.js").read()
+    assert "applyAssetTooltip" in script
+    assert "asset.tooltip" in script
+    assert 'title.className = "asset-title"' in script
+    assert "imageElement.title = asset.tooltip" in script
 
 
 def test_gallery_js_moves_region_toolbar_into_asset_header(repo_root):
