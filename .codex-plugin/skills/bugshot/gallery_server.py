@@ -89,13 +89,12 @@ def _build_single_image_unit(name):
 
 
 def _build_grouped_unit(unit_id, assets, metadata, manifest):
-    if manifest and manifest.get("assets") is not None:
-        ordered_assets = assets
-    else:
-        ordered_assets = sorted(
-            assets,
-            key=lambda asset: (_asset_priority(asset["name"]), asset["name"]),
-        )
+    reference_asset = manifest.get("reference_asset") if manifest else None
+    ordered_assets = _order_review_assets(
+        assets,
+        reference_asset=reference_asset,
+        preserve_input_order=bool(manifest and manifest.get("assets") is not None),
+    )
     return {
         "id": unit_id,
         "label": manifest.get("label") or unit_id if manifest else unit_id,
@@ -347,11 +346,47 @@ def _build_metadata(relative_path, name, absolute_path):
     }
 
 
-def _asset_priority(name):
+REFERENCE_ASSET_STEMS = {"reference", "source", "original", "input", "baseline", "source-crop"}
+CONVERSION_ASSET_STEMS = {
+    "final": 0,
+    "conversion": 1,
+    "converted": 2,
+    "candidate": 3,
+    "output": 4,
+    "generated": 5,
+    "result": 6,
+    "actual": 7,
+    "head": 8,
+}
+
+
+def _order_review_assets(assets, *, reference_asset=None, preserve_input_order=False):
+    if preserve_input_order:
+        indexed_assets = list(enumerate(assets))
+    else:
+        indexed_assets = list(enumerate(sorted(assets, key=lambda asset: asset["name"])))
+    return [
+        asset
+        for _, asset in sorted(
+            indexed_assets,
+            key=lambda item: _asset_order_key(
+                item[1]["name"],
+                reference_asset=reference_asset,
+                original_index=item[0],
+            ),
+        )
+    ]
+
+
+def _asset_order_key(name, *, reference_asset=None, original_index=0):
     stem = os.path.splitext(name)[0].lower()
-    if stem in ("reference", "source", "original", "input", "baseline"):
-        return 0
-    return 1
+    if reference_asset and name == reference_asset:
+        return (0, 0, original_index)
+    if stem in REFERENCE_ASSET_STEMS:
+        return (0, 0, original_index)
+    if stem in CONVERSION_ASSET_STEMS:
+        return (1, CONVERSION_ASSET_STEMS[stem], original_index)
+    return (2, 0, original_index)
 
 
 def _render_ansi(absolute_path):

@@ -92,9 +92,9 @@ def test_server_exposes_grouped_units(grouped_server):
         "Settings Panel Review",
     ]
     assert [asset["name"] for asset in grouped_server.units[0]["assets"]] == [
-        "candidate.png",
-        "final.svg",
         "reference.png",
+        "final.svg",
+        "candidate.png",
     ]
     assert grouped_server.units[0]["reference_asset_relative_path"] == (
         "login-button/reference.png"
@@ -169,6 +169,29 @@ def test_asset_tooltip_must_name_declared_asset(tmp_path):
         assert "asset_tooltips keys must name one of the unit assets" in str(error)
     else:
         raise AssertionError("Expected ValueError for unknown asset tooltip")
+
+
+def test_grouped_unit_orders_reference_conversion_then_diagnostics(tmp_path):
+    unit_dir = tmp_path / "logo-sample"
+    unit_dir.mkdir()
+    for name in [
+        "difference-overlay.png",
+        "final.svg",
+        "input-minus-svg.png",
+        "source-crop.png",
+        "svg-minus-input.png",
+    ]:
+        (unit_dir / name).write_bytes(b"asset")
+
+    units = gallery_server.discover_review_units(str(tmp_path))
+
+    assert [asset["name"] for asset in units[0]["assets"]] == [
+        "source-crop.png",
+        "final.svg",
+        "difference-overlay.png",
+        "input-minus-svg.png",
+        "svg-minus-input.png",
+    ]
 
 
 def test_index_page_returns_200(server):
