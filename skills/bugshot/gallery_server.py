@@ -68,6 +68,8 @@ def discover_review_units(directory):
             child_name,
             manifest,
         )
+        if manifest:
+            _apply_asset_tooltips(child_name, assets, manifest)
         units.append(_build_grouped_unit(child_name, assets, metadata, manifest))
 
     return units
@@ -175,12 +177,17 @@ def _load_unit_manifest(directory, unit_id):
         manifest.get("reference_asset"),
         unit_id,
     )
+    asset_tooltips = _validate_manifest_asset_tooltips(
+        manifest.get("asset_tooltips"),
+        unit_id,
+    )
 
     return {
         "label": label,
         "assets": assets,
         "metadata": metadata,
         "reference_asset": reference_asset,
+        "asset_tooltips": asset_tooltips,
     }
 
 
@@ -230,6 +237,32 @@ def _validate_manifest_reference_asset(value, unit_id):
     return value
 
 
+def _validate_manifest_asset_tooltips(value, unit_id):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(
+            f"Invalid manifest for unit {unit_id}: asset_tooltips must be an object"
+        )
+
+    tooltips = {}
+    for name, tooltip in value.items():
+        if not isinstance(name, str):
+            raise ValueError(
+                f"Invalid manifest for unit {unit_id}: asset_tooltips keys must be strings"
+            )
+        if name != os.path.basename(name) or "/" in name or "\\" in name:
+            raise ValueError(
+                f"Invalid manifest for unit {unit_id}: asset_tooltips keys must be direct child filenames"
+            )
+        if not isinstance(tooltip, str):
+            raise ValueError(
+                f"Invalid manifest for unit {unit_id}: asset_tooltips values must be strings"
+            )
+        tooltips[name] = tooltip
+    return tooltips
+
+
 def _discover_manifest_assets(directory, unit_id, manifest):
     asset_names = manifest.get("assets") if manifest else None
     if asset_names is None:
@@ -242,6 +275,20 @@ def _discover_manifest_assets(directory, unit_id, manifest):
                 f"Invalid manifest for unit {unit_id}: asset file not found: {name}"
             )
     return asset_names
+
+
+def _apply_asset_tooltips(unit_id, assets, manifest):
+    asset_tooltips = manifest.get("asset_tooltips")
+    if not asset_tooltips:
+        return
+
+    assets_by_name = {asset["name"]: asset for asset in assets}
+    for name, tooltip in asset_tooltips.items():
+        if name not in assets_by_name:
+            raise ValueError(
+                f"Invalid manifest for unit {unit_id}: asset_tooltips keys must name one of the unit assets"
+            )
+        assets_by_name[name]["tooltip"] = tooltip
 
 
 def _manifest_reference_asset_relative_path(unit_id, assets, manifest):
@@ -426,6 +473,8 @@ def _serialize_asset_payload(asset, review_root):
         "type": asset["type"],
         "src": f"/screenshots/{urllib.parse.quote(asset['relative_path'])}",
     }
+    if asset.get("tooltip") is not None:
+        payload["tooltip"] = asset["tooltip"]
     if asset["type"] == "ansi":
         payload["rendered_html"] = _render_ansi(absolute_path)
     elif asset["type"] == "svg":

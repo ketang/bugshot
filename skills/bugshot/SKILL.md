@@ -24,8 +24,9 @@ from user comments.
    The canonical producer-facing input format is documented in
    `docs/specs/2026-04-24-review-units.md`.
 
-   Grouped units may include `bugshot-unit.json` to set the display label and
-   explicit asset/metadata ordering.
+   Grouped units may include `bugshot-unit.json` to set the display label,
+   explicit asset/metadata ordering, and optional per-asset tooltips through
+   `asset_tooltips`.
 2. Find the bugshot installation directory (the directory containing this `SKILL.md`).
 3. Select the bind address by running the skill helper script. Capture stdout
    as the bind address and preserve stderr for the explanatory message:
