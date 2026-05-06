@@ -147,7 +147,9 @@ Example:
 
 ### Manifest Semantics
 
-- If `assets` is present, Bugshot uses that exact asset order.
+- If `assets` is present, Bugshot uses that list as the producer order, then
+  normalizes review display order so the reference asset appears first,
+  conversion assets appear second, and diagnostic assets follow.
 - If `reference_asset` is present, Bugshot treats that exact asset as the
   unit's canonical reference asset.
 - If `asset_tooltips` is present, Bugshot shows each provided string as a
@@ -193,8 +195,10 @@ Invalid manifests are fatal for that review root. Bugshot raises an error when:
 - Unit label = `bugshot-unit.json.label` when present, otherwise child directory name
 - Unit path = `<review-root>/<unit-id>`
 - Assets = either:
-  - `bugshot-unit.json.assets` in manifest order, or
-  - recognized asset files directly inside that child directory
+  - `bugshot-unit.json.assets` in producer order, normalized for review display
+    as reference, conversion, then diagnostics, or
+  - recognized asset files directly inside that child directory, normalized by
+    the same review display groups
 - Metadata = either:
   - `bugshot-unit.json.metadata` in manifest order, or
   - `.json` files directly inside that child directory other than `bugshot-unit.json`
@@ -212,18 +216,34 @@ Nested subdirectories inside a review unit are ignored for discovery.
 
 ## Asset Ordering
 
-When no manifest asset list is provided, Bugshot renders grouped-unit assets in
-a stable heuristic order:
+Bugshot renders grouped-unit assets in a stable review order:
 
-1. Filenames whose stem is one of:
+1. The manifest `reference_asset`, when present, or filenames whose stem is one of:
    - `reference`
    - `source`
    - `original`
    - `input`
    - `baseline`
-2. All remaining assets, sorted alphabetically by filename
+   - `source-crop`
+2. Conversion assets whose stem is one of:
+   - `final`
+   - `conversion`
+   - `converted`
+   - `candidate`
+   - `output`
+   - `generated`
+   - `result`
+   - `actual`
+   - `head`
+3. All remaining diagnostic assets
 
-This is only a fallback heuristic. Producers should prefer an explicit manifest
+Within the conversion group, Bugshot prefers `final.*` before other
+conversion-like names so the primary generated result appears immediately after
+the reference. For other assets, `bugshot-unit.json.assets` preserves producer
+order within each group; without a manifest asset list, Bugshot sorts filenames
+alphabetically within each group.
+
+This grouping is only a fallback heuristic. Producers should prefer an explicit manifest
 when asset order matters.
 
 ## Recommended Metadata Summary
