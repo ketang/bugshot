@@ -42,6 +42,7 @@ interface GalleryAsset {
     rendered_html?: string;
     svg_markup?: string;
     primary_color?: string;
+    tooltip?: string;
 }
 
 interface GalleryMetadata {
@@ -1122,21 +1123,35 @@ interface GalleryTestHooks {
             var imageElement = document.createElement("img");
             imageElement.src = asset.src;
             imageElement.alt = asset.name;
+            if (asset.tooltip) {
+                imageElement.title = asset.tooltip;
+            }
             container.appendChild(imageElement);
             return;
         }
 
         if (asset.type === "svg") {
-            container.appendChild(createSvgPreview(asset, isPreview));
+            var svgPreview = createSvgPreview(asset, isPreview);
+            applyAssetTooltip(svgPreview, asset);
+            container.appendChild(svgPreview);
             return;
         }
 
         var previewDiv = document.createElement("div");
         previewDiv.className = isPreview ? "ansi-preview" : "ansi-rendered";
+        applyAssetTooltip(previewDiv, asset);
         var previewPre = document.createElement("pre");
         previewPre.innerHTML = asset.rendered_html;
         previewDiv.appendChild(previewPre);
         container.appendChild(previewDiv);
+    }
+
+    function applyAssetTooltip(element, asset) {
+        if (!asset.tooltip) {
+            return;
+        }
+        element.title = asset.tooltip;
+        element.setAttribute("aria-label", asset.tooltip);
     }
 
     function createSvgPreview(asset, isPreview) {
@@ -2319,6 +2334,7 @@ interface GalleryTestHooks {
         var title = document.createElement("div");
         title.className = "asset-title";
         title.textContent = asset.name;
+        applyAssetTooltip(title, asset);
         header.appendChild(title);
         card.appendChild(header);
 

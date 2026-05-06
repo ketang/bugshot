@@ -126,6 +126,10 @@ Example:
   "label": "Login Button Review",
   "assets": ["reference.png", "final.svg", "difference-overlay.png"],
   "reference_asset": "reference.png",
+  "asset_tooltips": {
+    "reference.png": "Baseline rendering",
+    "final.svg": "Current output"
+  },
   "metadata": ["bugshot-metadata.json"]
 }
 ```
@@ -137,6 +141,8 @@ Example:
 - `assets`: optional non-empty list of direct child asset filenames
 - `reference_asset`: optional direct child asset filename naming the canonical
   reference asset for the unit
+- `asset_tooltips`: optional object mapping direct child asset filenames to
+  tooltip strings shown for individual images in the gallery
 - `metadata`: optional non-empty list of direct child metadata filenames
 
 ### Manifest Semantics
@@ -144,6 +150,8 @@ Example:
 - If `assets` is present, Bugshot uses that exact asset order.
 - If `reference_asset` is present, Bugshot treats that exact asset as the
   unit's canonical reference asset.
+- If `asset_tooltips` is present, Bugshot shows each provided string as a
+  tooltip on the matching asset's title and preview.
 - If `metadata` is present, Bugshot uses that exact metadata list and order.
 - If `label` is absent, the unit label defaults to the directory name.
 - If `assets` is absent, Bugshot falls back to heuristic asset discovery.
@@ -163,6 +171,8 @@ Invalid manifests are fatal for that review root. Bugshot raises an error when:
 - `label` is not a string
 - `reference_asset` is present but is not a string direct child asset filename
 - `assets` or `metadata` is present but is not a non-empty list of strings
+- `asset_tooltips` is present but is not an object whose keys are declared
+  asset filenames and whose values are strings
 - a listed file does not exist
 - a listed file has the wrong extension for its field
 - `reference_asset` does not name one of the unit's assets
