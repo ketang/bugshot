@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -73,6 +74,27 @@ def read_manifest(path: str | os.PathLike[str]) -> Manifest:
         capture_command_sha256=raw["capture_command_sha256"],
         images=images,
     )
+
+
+def verify_images(images_dir: str | os.PathLike[str], manifest: Manifest) -> None:
+    """Confirm every manifest entry exists on disk with the expected SHA-256.
+
+    Catches the case where someone overwrites baseline image bytes without
+    going through vizline, leaving the manifest stale. Without this check,
+    vizdiff would classify HEAD against the polluted baseline and silently
+    return `unchanged` for tampered surfaces.
+    """
+    base = Path(images_dir)
+    for entry in manifest.images:
+        candidate = base / entry.path
+        if not candidate.is_file():
+            raise ManifestError(f"missing baseline image: {entry.path}")
+        actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        if actual != entry.sha256:
+            raise ManifestError(
+                f"baseline image sha mismatch for {entry.path}: "
+                f"manifest expected {entry.sha256[:8]}, on disk {actual[:8]}"
+            )
 
 
 def atomic_promote(tmp_dir: Path, target_dir: Path, refresh: bool = False) -> None:

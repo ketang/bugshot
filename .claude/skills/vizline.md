@@ -1,6 +1,6 @@
 ---
 name: vizline
-description: Capture baseline screenshots so users can examine visual changes, whether intended or accidental
+description: TRIGGER at branch start before any rendered-output edit when `.agent-plugins/bento/bugshot/viz/capture-command` exists in the worktree and edits may affect UI, templates, or design system. Captures the pre-edit baseline. Required upstream of vizdiff.
 arguments:
   - name: feature_worktree
     description: Path to the feature worktree where the baseline should be written
@@ -15,11 +15,19 @@ later compares HEAD against.
 
 ## When to use
 
-Before HEAD has diverged from the base ref in a way that affects rendered
-output. Vizline is not primarily a regression detector; it prepares a baseline
-for user examination of later visual changes, including changes that are
-intended, accidental, or still undecided. Typically called once at the start of
-feature work; refresh on rebase.
+Run at branch start, before any edit that might change rendered output. Vizline
+is not primarily a regression detector; it prepares a baseline for later user
+examination of visual changes, intended or accidental. Typically called once at
+the start of feature work; refresh on rebase.
+
+Skip when:
+
+- The repo doesn't ship `.agent-plugins/bento/bugshot/viz/capture-command`.
+- The task is backend-only (API, schema, migrations, infra) with no rendered
+  impact.
+- A current baseline already exists at `.bugshot/baseline/manifest.json` matching
+  the current base ref. Pass `--refresh` only after a rebase or when the prior
+  baseline is known stale.
 
 ## Project contract
 

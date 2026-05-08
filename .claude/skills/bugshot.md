@@ -1,6 +1,6 @@
 ---
 name: bugshot
-description: Launch a review gallery for visual bug review and issue filing
+description: Launch a review gallery on a directory of screenshots or grouped review units; emit issue drafts from user comments. For visual diffs against a baseline, prefer vizdiff.
 arguments:
   - name: directory
     description: Path to the review root containing screenshots or grouped review units
@@ -11,6 +11,11 @@ arguments:
 
 Review screenshots or grouped review units in a browser gallery and file issues
 from user comments.
+
+Bugshot refuses to launch on directories inside a `.bugshot/` working area
+(e.g. `.bugshot/baseline/`, `.bugshot/baseline/images/`, `.bugshot/head/`).
+Those are vizline/vizdiff state, not review roots — use `vizdiff` to diff HEAD
+against the baseline instead.
 
 ## Startup
 

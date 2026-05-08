@@ -1,6 +1,6 @@
 ---
 name: vizdiff
-description: Diff HEAD screenshots against the baseline and review in the bugshot gallery
+description: TRIGGER at handoff or before landing when `.bugshot/baseline/manifest.json` exists in the worktree. Captures HEAD, diffs against vizline's baseline, opens a review gallery, emits issue drafts. Run vizline first if no baseline exists.
 arguments:
   - name: feature_worktree
     description: Path to the feature worktree to diff
@@ -16,8 +16,15 @@ prewritten non-interactive manifest with `--manifest`.
 
 ## When to use
 
-After non-trivial rendering changes on a feature branch where you want a
-human-reviewed list of regressions / additions / removals before landing.
+At handoff time or before landing, when feature edits may have changed
+rendered output. Vizdiff requires a baseline produced upstream by `vizline`.
+
+Skip when:
+
+- No baseline exists at `.bugshot/baseline/manifest.json` (run `bento:vizline`
+  first, or pass `--head-only` for plain HEAD capture without comparison).
+- The branch is verifiably non-rendering — backend-only changes with no UI,
+  template, or design-system impact.
 
 ## Prerequisites
 
