@@ -314,7 +314,15 @@ def _resolve_baseline_source(
             f"base ref {resolved!r} now resolves to {actual_sha[:8]}.\n"
             f"  Refresh via:    bento:vizline --feature-worktree {feature_worktree} --refresh"
         )
-    return baseline_dir / "images", resolved, actual_sha
+    images_dir = baseline_dir / "images"
+    try:
+        baseline_manifest.verify_images(images_dir, manifest)
+    except baseline_manifest.ManifestError as error:
+        raise VizdiffError(
+            f"Tampered baseline at {baseline_dir}: {error}.\n"
+            f"  Refresh via:    bento:vizline --feature-worktree {feature_worktree} --refresh"
+        ) from error
+    return images_dir, resolved, actual_sha
 
 
 def run_in_process(

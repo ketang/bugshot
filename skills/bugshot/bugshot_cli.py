@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 
 from bugshot_workflow import (
     DEFAULT_BIND_ADDRESS,
@@ -14,6 +15,24 @@ from bugshot_workflow import (
     ShellIO,
     run_review_session,
 )
+
+
+def _refuse_bugshot_internal_path(directory: str) -> str | None:
+    """Block bugshot launches against `.bugshot/` working areas.
+
+    `.bugshot/baseline/`, `.bugshot/baseline/images/`, and `.bugshot/head/`
+    are vizline/vizdiff state, not review roots. Running plain bugshot on
+    them produces a flat, unpaired view that masks the intended diff
+    workflow.
+    """
+    parts = Path(directory).resolve().parts
+    if ".bugshot" in parts:
+        return (
+            f"{directory} is inside a .bugshot/ directory.\n"
+            f"This is a vizline/vizdiff working area, not a bugshot review root.\n"
+            f"Run `vizdiff <feature-worktree>` instead to diff HEAD against the baseline."
+        )
+    return None
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,6 +74,11 @@ def main() -> int:
 
     if not os.path.isdir(args.directory):
         io.write_error(f"Not a directory: {args.directory}")
+        return 2
+
+    refusal = _refuse_bugshot_internal_path(args.directory)
+    if refusal is not None:
+        io.write_error(refusal)
         return 2
 
     bind_address = LOOPBACK_BIND_ADDRESS if args.local_only else args.bind
