@@ -67,6 +67,31 @@ def test_full_round_trip(fake_git_worktree, fake_capture_command):
     assert draft["user_comment"] == "regression here"
 
 
+def test_vizdiff_rejects_tampered_baseline_image(fake_git_worktree, fake_capture_command):
+    """If on-disk baseline images don't match the manifest SHAs, vizdiff refuses with refresh guidance."""
+    rc = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "vizline_cli.py"),
+         "--feature-worktree", str(fake_git_worktree), "--base-ref", "main"],
+        capture_output=True, text=True,
+    )
+    assert rc.returncode == 0, rc.stderr
+
+    baseline_image = fake_git_worktree / ".bugshot" / "baseline" / "images" / "pages" / "login" / "desktop.png"
+    assert baseline_image.is_file()
+    baseline_image.write_bytes(b"TAMPERED-CONTENT")
+
+    import vizdiff_workflow
+
+    with pytest.raises(vizdiff_workflow.VizdiffError) as excinfo:
+        vizdiff_workflow.build_review_root(
+            feature_worktree=fake_git_worktree,
+            base_ref="main",
+        )
+    message = str(excinfo.value).lower()
+    assert "baseline" in message
+    assert "refresh" in message
+
+
 def test_full_round_trip_with_added_and_removed_units(fake_git_worktree, fake_capture_command):
     """Verify added + removed classifications propagate end-to-end."""
     rc = subprocess.run(
