@@ -47,14 +47,20 @@ bind_address="$({{bugshot_dir}}/select-bind-address)"
    in a separate variable before testing them. If a remote-login signal is
    present, it selects `0.0.0.0`; otherwise it selects `127.0.0.1`.
 
-4. Run the CLI with `--json --bind "$bind_address"` and capture both stdout and
-   stderr:
+4. Run the CLI in the foreground with `--json --bind "$bind_address"`. This is
+   a blocking call — **do not use background mode**:
 
 ```bash
 python3 {{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory}}
 ```
 
-5. Read the first line of the CLI's stderr — it is `Gallery is running at <url>`. In an interactive agent session, immediately print this URL in the visible conversation even if the CLI is running as a background command. Tell the user:
+   The CLI blocks until the user finishes reviewing and the session ends. In
+   Claude Code the Bash tool streams stderr in real time, so the gallery URL
+   appears in the tool output while the command is still running.
+
+5. The first line of the CLI's stderr is `Gallery is running at <url>`. Once
+   the tool call returns (after the user has finished reviewing), print the URL
+   in the visible conversation and tell the user what happened:
 
    > Bugshot gallery is running at `<url>`. Open that URL, review the units, type comments on any issues you see, then click "Done Reviewing".
 
@@ -63,7 +69,10 @@ python3 {{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory
    on the network. Otherwise it binds to `127.0.0.1`. If the user explicitly
    requests a bind mode, honor that request instead of using the helper.
 
-6. Wait for the CLI to exit. The CLI handles all polling, heartbeat timeout, and browser lifecycle internally. Do not poll any HTTP endpoints yourself.
+6. The CLI exits on its own when the user clicks "Done Reviewing" (or when the
+   heartbeat times out). The foreground Bash call returns at that point. The
+   CLI handles all polling and browser lifecycle internally — do not poll any
+   HTTP endpoints yourself.
 
 ## Process Comments
 
