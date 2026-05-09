@@ -265,6 +265,50 @@ def test_grouped_svg_asset_serves_with_svg_content_type(grouped_server):
     assert "<svg" in resp.read().decode()
 
 
+def test_image_asset_has_cache_control_header(server):
+    resp = urllib.request.urlopen(f"{server.url}/screenshots/alpha.png")
+    assert resp.status == 200
+    assert resp.headers.get("Cache-Control") == "private, max-age=3600"
+
+
+def test_static_asset_has_cache_control_header(server):
+    resp = urllib.request.urlopen(f"{server.url}/static/gallery.js")
+    assert resp.status == 200
+    assert resp.headers.get("Cache-Control") == "private, max-age=86400"
+
+
+def test_index_page_contains_preload_links_for_images(server):
+    resp = urllib.request.urlopen(f"{server.url}/")
+    assert resp.status == 200
+    body = resp.read().decode()
+    assert 'rel="preload"' in body
+    assert 'as="image"' in body
+    assert "/screenshots/alpha.png" in body
+
+
+def test_index_page_preload_links_limited_to_fifty(tmp_path):
+    for i in range(60):
+        (tmp_path / f"img{i:02d}.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x02\x00\x00\x00\x90wS\xde"
+            b"\x00\x00\x00\x0cIDATx"
+            b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+            b"\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+    units = gallery_server.discover_review_units(str(tmp_path))
+    links = gallery_server._build_preload_links(units)
+    assert links.count('rel="preload"') == 50
+
+
+def test_ansi_assets_excluded_from_preload_links(server):
+    resp = urllib.request.urlopen(f"{server.url}/")
+    body = resp.read().decode()
+    assert "delta.ansi" not in body.split('rel="preload"')[0] if 'rel="preload"' in body else True
+    links = gallery_server._build_preload_links(server.units)
+    assert "delta.ansi" not in links
+
+
 def test_invalid_manifest_raises_value_error(tmp_path):
     unit_dir = tmp_path / "broken-unit"
     unit_dir.mkdir()
