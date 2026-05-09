@@ -562,6 +562,26 @@ def unit_detail_payload(unit, review_root):
     return payload
 
 
+_PRELOAD_LIMIT = 50
+
+
+def _build_preload_links(units):
+    """Return HTML <link rel="preload"> tags for the first primary image assets.
+
+    Limited to _PRELOAD_LIMIT units so the <head> stays compact when a session
+    has many review units. SVG and raster image types both get preloaded since
+    the browser fetches them on the same /screenshots/ path; ANSI assets are
+    skipped because they are rendered server-side as HTML, not fetched as images.
+    """
+    tags = []
+    for unit in units[:_PRELOAD_LIMIT]:
+        asset = unit["assets"][0]
+        if asset["type"] in ("image", "svg"):
+            src = f"/screenshots/{urllib.parse.quote(asset['relative_path'])}"
+            tags.append(f'<link rel="preload" as="image" href="{src}">')
+    return "\n    ".join(tags)
+
+
 # Element id used by static/gallery.js to toggle the region-drawing legend
 # entry's hidden state based on whether the current unit supports region
 # drawing. Kept as a module constant so the server-side render and any
@@ -717,7 +737,12 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             template = f.read()
 
         unit_items = [self._serialize_unit_for_index(unit) for unit in self.units]
-        content = template.replace("{{units_json}}", json.dumps(unit_items))
+        preload_links = _build_preload_links(self.units)
+        content = (
+            template
+            .replace("{{units_json}}", json.dumps(unit_items))
+            .replace("{{preload_links}}", preload_links)
+        )
         self._send_html(content)
 
     def _serve_detail(self, unit_id):
@@ -782,6 +807,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "private, max-age=86400")
         self.end_headers()
         self.wfile.write(data)
 
@@ -812,6 +838,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "private, max-age=3600")
         self.end_headers()
         self.wfile.write(data)
 
