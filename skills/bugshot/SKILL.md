@@ -115,7 +115,26 @@ Identify:
 - What elements are relevant to the user's comment
 - What specifically appears wrong or unexpected
 
-**b. Compose the issue.** Combine the user's comment with your visual analysis. If the project has issue templates, follow them. Otherwise use this structure:
+**b. Examine relevant source code.** Using what the visual analysis revealed,
+search the codebase for the component, file, or feature area shown in the
+screenshot. This step serves three purposes:
+
+1. **Validate the issue** — determine whether the behavior is a bug or
+   intentional. If source code clearly shows it is by design, flag that before
+   composing an issue and ask the user whether to proceed.
+2. **Gather implementation context** — identify the responsible component(s),
+   relevant file paths, function names, or configuration that would help a
+   developer locate and address the issue.
+3. **Characterize scope** — determine whether the problem is isolated (one
+   component, one file) or cross-cutting (shared utility, base styles, global
+   config).
+
+Include the relevant file paths and scope characterization in the composed
+issue.
+
+**c. Compose the issue.** Combine the user's comment, visual analysis, and
+source code findings. If the project has issue templates, follow them.
+Otherwise use this structure:
 
 ```
 ## Current Behavior
@@ -130,9 +149,11 @@ Identify:
 ## Additional Context
 - Screenshot or unit: <image_name or unit_id>
 - User comment: "<user_comment>"
+- Relevant source: <file path(s) identified in step b>
+- Scope: <isolated / cross-cutting — one sentence>
 ```
 
-**c. Check for duplicates.** If the project has an issue-flow skill, use its search capability with keywords from the composed issue. Present any potential duplicates before filing:
+**d. Check for duplicates.** If the project has an issue-flow skill, use its search capability with keywords from the composed issue. Present any potential duplicates before filing:
 
 > Found potential duplicates:
 > - #42: "Login button overflow on mobile" (open)
@@ -142,7 +163,7 @@ Identify:
 
 If there is no issue-flow skill available, skip duplicate checking.
 
-**d. Confirm with the user.** Show the composed issue:
+**e. Confirm with the user.** Show the composed issue:
 
 > **Filing issue for `login-page.png` or `login-flow`:**
 > [composed issue text]
@@ -151,9 +172,9 @@ If there is no issue-flow skill available, skip duplicate checking.
 
 If the user says no, allow them to edit or skip.
 
-**e. File the issue.** Delegate to the project's issue-flow skill. If no such skill is available, tell the user the issue is ready and ask where to file it (or write it to a file).
+**f. File the issue.** Delegate to the project's issue-flow skill. If no such skill is available, tell the user the issue is ready and ask where to file it (or write it to a file).
 
-**f. Attach the evidence.** If the tracker supports attachments, attach the
+**g. Attach the evidence.** If the tracker supports attachments, attach the
 relevant files:
 
 - for single-image drafts, attach `image_path`
@@ -164,7 +185,7 @@ If attachment fails, report concisely:
 
 > Note: Could not attach screenshot to #42 (attachment not supported by tracker).
 
-**g. Report.**
+**h. Report.**
 
 > Filed: #42 — "Login submit button is clipped on right edge"
 
