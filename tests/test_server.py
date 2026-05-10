@@ -414,6 +414,32 @@ def test_detail_styles_align_filename_and_copy_button(repo_root):
     assert re.search(r"\.btn-copy-filename\s*\{[^}]*line-height:\s*1;", style, re.S)
 
 
+def test_fullsize_gallery_preserves_native_image_dimensions(repo_root):
+    style = open(f"{repo_root}/static/style.css").read()
+
+    assert re.search(
+        r"\.gallery\.fullsize-mode\s*\{[^}]*grid-template-columns:\s*max-content;",
+        style,
+        re.S,
+    )
+    assert re.search(
+        r"\.fullsize-mode\s+\.gallery-item\s+img\s*\{[^}]*width:\s*auto;",
+        style,
+        re.S,
+    )
+    assert re.search(
+        r"\.fullsize-mode\s+\.gallery-item\s+\.svg-asset,\s*"
+        r"\.fullsize-mode\s+\.gallery-item\s+\.svg-preview\s+img\s*\{[^}]*width:\s*auto;",
+        style,
+        re.S,
+    )
+    assert re.search(
+        r"\.fullsize-mode\s+\.gallery-item\s*\{[^}]*overflow:\s*visible;",
+        style,
+        re.S,
+    )
+
+
 def test_theme_controls_are_labeled_selects_not_buttons(repo_root):
     index_template = open(f"{repo_root}/templates/index.html").read()
     detail_template = open(f"{repo_root}/templates/detail.html").read()
