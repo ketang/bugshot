@@ -338,7 +338,8 @@ header h1 {
 }
 
 .gallery.fullsize-mode {
-    grid-template-columns: 1fr;
+    grid-template-columns: max-content;
+    overflow: auto;
 }
 
 .gallery-item {
@@ -359,12 +360,33 @@ header h1 {
     transform: translateY(-2px);
 }
 
+.fullsize-mode .gallery-item {
+    width: max-content;
+    overflow: visible;
+}
+
 .gallery-item img,
 .gallery-item .svg-asset,
 .gallery-item .svg-preview img {
     width: 100%;
     height: auto;
     display: block;
+}
+
+.fullsize-mode .gallery-item img {
+    width: auto;
+    max-width: none;
+}
+
+.fullsize-mode .gallery-item .svg-preview {
+    width: max-content;
+    min-height: 0;
+}
+
+.fullsize-mode .gallery-item .svg-asset,
+.fullsize-mode .gallery-item .svg-preview img {
+    width: auto;
+    max-width: none;
 }
 
 .gallery-item .ansi-preview,
