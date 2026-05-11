@@ -76,8 +76,23 @@ python3 {{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory
 
 ## Process Comments
 
-The CLI's stdout ends with a single JSON line. Flat screenshot mode preserves
-the legacy per-image draft shape, while grouped-unit mode emits unit context:
+The CLI's stdout ends with a single JSON line. It also writes the same JSON
+payload to a temporary file and reports the path on stderr as:
+
+```text
+Bugshot issue draft JSON written to <path>
+```
+
+If stdout capture is truncated, recover the complete payload from that file.
+The CLI also preserves the temporary SQLite database after completion and
+reports it on stderr as:
+
+```text
+Bugshot temporary database retained at <path>
+```
+
+Flat screenshot mode preserves the legacy per-image draft shape, while
+grouped-unit mode emits unit context:
 
 ```json
 {"draft_count": 2, "drafts": [

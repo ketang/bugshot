@@ -8,6 +8,7 @@ import os
 import select
 import sqlite3
 import sys
+import tempfile
 import time
 import webbrowser
 from dataclasses import dataclass
@@ -106,17 +107,27 @@ def run_review_session(
             io,
             json_output=json_output,
         )
+        payload = {
+            "draft_count": summary.draft_count,
+            "drafts": summary.drafts,
+        }
+        draft_output_path = _write_draft_json_file(payload)
         io.write(f"Bugshot session complete. Produced {summary.draft_count} issue drafts.")
+        io.write(f"Bugshot issue draft JSON written to {draft_output_path}")
+        io.write(f"Bugshot temporary database retained at {server.db_path}")
         if json_output:
-            io.write_json({
-                "draft_count": summary.draft_count,
-                "drafts": summary.drafts,
-            })
+            io.write_json(payload)
         return 0
     finally:
         server.shutdown()
-        if os.path.exists(server.db_path):
-            os.unlink(server.db_path)
+
+
+def _write_draft_json_file(payload: object) -> str:
+    fd, path = tempfile.mkstemp(prefix="bugshot_drafts_", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+        f.write("\n")
+    return path
 
 
 def _wait_for_completion(db_path: str, io: ShellIO, poll_interval_seconds: float) -> str | None:
