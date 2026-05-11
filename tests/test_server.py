@@ -268,7 +268,7 @@ def test_grouped_svg_asset_serves_with_svg_content_type(grouped_server):
 def test_image_asset_has_cache_control_header(server):
     resp = urllib.request.urlopen(f"{server.url}/screenshots/alpha.png")
     assert resp.status == 200
-    assert resp.headers.get("Cache-Control") == "private, max-age=3600"
+    assert resp.headers.get("Cache-Control") == "private, max-age=31536000, immutable"
 
 
 def test_static_asset_has_cache_control_header(server):
@@ -277,16 +277,16 @@ def test_static_asset_has_cache_control_header(server):
     assert resp.headers.get("Cache-Control") == "private, max-age=86400"
 
 
-def test_index_page_contains_preload_links_for_images(server):
+def test_index_page_contains_prefetch_links_for_images(server):
     resp = urllib.request.urlopen(f"{server.url}/")
     assert resp.status == 200
     body = resp.read().decode()
-    assert 'rel="preload"' in body
+    assert 'rel="prefetch"' in body
     assert 'as="image"' in body
     assert "/screenshots/alpha.png" in body
 
 
-def test_index_page_preload_links_limited_to_fifty(tmp_path):
+def test_index_page_prefetches_all_image_assets(tmp_path):
     for i in range(60):
         (tmp_path / f"img{i:02d}.png").write_bytes(
             b"\x89PNG\r\n\x1a\n"
@@ -297,15 +297,37 @@ def test_index_page_preload_links_limited_to_fifty(tmp_path):
             b"\x00\x00\x00\x00IEND\xaeB`\x82"
         )
     units = gallery_server.discover_review_units(str(tmp_path))
-    links = gallery_server._build_preload_links(units)
-    assert links.count('rel="preload"') == 50
+    links = gallery_server._build_image_prefetch_links(units)
+    assert links.count('rel="prefetch"') == 60
+    assert "/screenshots/img00.png" in links
+    assert "/screenshots/img59.png" in links
 
 
-def test_ansi_assets_excluded_from_preload_links(server):
+def test_index_page_prefetches_all_grouped_image_assets(grouped_server):
+    resp = urllib.request.urlopen(f"{grouped_server.url}/")
+    body = resp.read().decode()
+    assert "/screenshots/login-button/reference.png" in body
+    assert "/screenshots/login-button/final.svg" in body
+    assert "/screenshots/login-button/candidate.png" in body
+    assert "/screenshots/settings-panel/reference.png" in body
+    assert "/screenshots/settings-panel/final.svg" in body
+    assert "/screenshots/settings-panel/candidate.png" in body
+
+
+def test_detail_page_prefetches_previous_and_next_images(server):
+    resp = urllib.request.urlopen(f"{server.url}/view/beta.png")
+    assert resp.status == 200
+    body = resp.read().decode()
+    assert "/screenshots/alpha.png" in body
+    assert "/screenshots/gamma.jpg" in body
+    assert "/screenshots/beta.png" not in body.split("</head>")[0]
+
+
+def test_ansi_assets_excluded_from_prefetch_links(server):
     resp = urllib.request.urlopen(f"{server.url}/")
     body = resp.read().decode()
-    assert "delta.ansi" not in body.split('rel="preload"')[0] if 'rel="preload"' in body else True
-    links = gallery_server._build_preload_links(server.units)
+    assert "delta.ansi" not in body.split('rel="prefetch"')[0] if 'rel="prefetch"' in body else True
+    links = gallery_server._build_image_prefetch_links(server.units)
     assert "delta.ansi" not in links
 
 
