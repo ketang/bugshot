@@ -1,4 +1,7 @@
 import json
+import os
+import re
+import sqlite3
 import subprocess
 import time
 import urllib.request
@@ -121,7 +124,7 @@ def test_cli_emits_ansi_draft(repo_root, workflow_screenshot_dir):
 
 def test_cli_json_output(repo_root, workflow_screenshot_dir):
     process = _start_cli(repo_root, workflow_screenshot_dir, extra_args=["--json"])
-    gallery_url, _initial_stderr = _read_gallery_url(process, source="stderr")
+    gallery_url, initial_stderr = _read_gallery_url(process, source="stderr")
 
     _post_json(
         f"{gallery_url}/api/comments",
@@ -139,7 +142,7 @@ def test_cli_json_output(repo_root, workflow_screenshot_dir):
     )
     _post_json(f"{gallery_url}/api/done", {})
 
-    stdout, _stderr = process.communicate("", timeout=CLI_FINISH_TIMEOUT_SECONDS)
+    stdout, stderr = process.communicate("", timeout=CLI_FINISH_TIMEOUT_SECONDS)
 
     assert process.returncode == 0
     payload = json.loads(stdout.strip())
@@ -157,6 +160,39 @@ def test_cli_json_output(repo_root, workflow_screenshot_dir):
             "user_comment": "The panel header overlaps the first checkbox.",
             "region": None,
         },
+    ]
+
+    stderr_output = initial_stderr + stderr
+    output_path = re.search(
+        r"Bugshot issue draft JSON written to (.+)",
+        stderr_output,
+    ).group(1)
+    db_path = re.search(
+        r"Bugshot temporary database retained at (.+)",
+        stderr_output,
+    ).group(1)
+
+    assert os.path.exists(output_path)
+    assert os.path.exists(db_path)
+    with open(output_path, "r", encoding="utf-8") as f:
+        assert json.load(f) == payload
+
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT unit_id, body FROM comments ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert rows == [
+        (
+            "login-clipped-button.png",
+            "Submit button is clipped on the right edge.",
+        ),
+        (
+            "settings-overlap.png",
+            "The panel header overlaps the first checkbox.",
+        ),
     ]
 
 

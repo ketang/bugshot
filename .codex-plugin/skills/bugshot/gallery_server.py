@@ -5,6 +5,7 @@ Usage: python3 gallery_server.py /path/to/review-root [--bind ADDRESS | --local-
 
 import argparse
 import atexit
+import html
 import json
 import os
 import re
@@ -562,24 +563,46 @@ def unit_detail_payload(unit, review_root):
     return payload
 
 
-_PRELOAD_LIMIT = 50
+IMAGE_CACHE_CONTROL = "private, max-age=31536000, immutable"
 
 
-def _build_preload_links(units):
-    """Return HTML <link rel="preload"> tags for the first primary image assets.
+def _build_image_prefetch_links(units):
+    """Return HTML <link rel="prefetch"> tags for image assets in review units.
 
-    Limited to _PRELOAD_LIMIT units so the <head> stays compact when a session
-    has many review units. SVG and raster image types both get preloaded since
-    the browser fetches them on the same /screenshots/ path; ANSI assets are
-    skipped because they are rendered server-side as HTML, not fetched as images.
+    SVG and raster image types both get prefetched since the browser fetches
+    them on the same /screenshots/ path; ANSI assets are skipped because they
+    are rendered server-side as HTML, not fetched as images.
     """
     tags = []
-    for unit in units[:_PRELOAD_LIMIT]:
-        asset = unit["assets"][0]
-        if asset["type"] in ("image", "svg"):
-            src = f"/screenshots/{urllib.parse.quote(asset['relative_path'])}"
-            tags.append(f'<link rel="preload" as="image" href="{src}">')
+    for unit in units:
+        for asset in unit["assets"]:
+            if asset["type"] in ("image", "svg"):
+                src = f"/screenshots/{urllib.parse.quote(asset['relative_path'])}"
+                tags.append(
+                    '<link rel="prefetch" as="image" href="'
+                    f'{html.escape(src, quote=True)}">'
+                )
     return "\n    ".join(tags)
+
+
+def _unit_has_prefetchable_image(unit):
+    return any(asset["type"] in ("image", "svg") for asset in unit["assets"])
+
+
+def _adjacent_image_units(units, current_index):
+    previous_unit = None
+    for unit in reversed(units[:current_index]):
+        if _unit_has_prefetchable_image(unit):
+            previous_unit = unit
+            break
+
+    next_unit = None
+    for unit in units[current_index + 1:]:
+        if _unit_has_prefetchable_image(unit):
+            next_unit = unit
+            break
+
+    return [unit for unit in (previous_unit, next_unit) if unit is not None]
 
 
 # Element id used by static/gallery.js to toggle the region-drawing legend
@@ -737,11 +760,11 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             template = f.read()
 
         unit_items = [self._serialize_unit_for_index(unit) for unit in self.units]
-        preload_links = _build_preload_links(self.units)
+        prefetch_links = _build_image_prefetch_links(self.units)
         content = (
             template
             .replace("{{units_json}}", json.dumps(unit_items))
-            .replace("{{preload_links}}", preload_links)
+            .replace("{{prefetch_links}}", prefetch_links)
         )
         self._send_html(content)
 
@@ -781,6 +804,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "{{nav_json}}": json.dumps(nav),
             "{{units_json}}": json.dumps(detail_units),
             "{{shortcut_legend_html}}": _render_shortcut_legend(flat_mode),
+            "{{prefetch_links}}": _build_image_prefetch_links(
+                _adjacent_image_units(self.units, idx)
+            ),
         }
         content = template
         for key, value in replacements.items():
@@ -838,7 +864,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "private, max-age=3600")
+        self.send_header("Cache-Control", IMAGE_CACHE_CONTROL)
         self.end_headers()
         self.wfile.write(data)
 
