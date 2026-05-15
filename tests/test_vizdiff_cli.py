@@ -89,6 +89,7 @@ def test_vizdiff_errors_clearly_when_baseline_missing(fake_git_worktree, fake_ca
     )
     assert result.returncode != 0
     assert "baseline" in result.stderr.lower()
+    assert "--from-base-ref" in result.stderr
 
 
 def test_vizdiff_head_only_skips_baseline_lookup(fake_git_worktree, fake_capture_command):

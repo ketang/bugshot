@@ -16,8 +16,10 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="Path to the feature worktree (target of the baseline)")
     parser.add_argument("--base-ref", default=None,
                         help="Base ref to capture from (default: origin/HEAD or main or master)")
+    parser.add_argument("--from-base-ref", action="store_true",
+                        help="Capture from a temporary base-ref worktree after work has begun")
     parser.add_argument("--ephemeral-root", default=None, type=Path,
-                        help="Directory in which to place the ephemeral base-ref worktree")
+                        help="Directory in which to place the ephemeral base-ref worktree with --from-base-ref")
     parser.add_argument("--task-title", default=None)
     parser.add_argument("--task-description", default=None)
     parser.add_argument("--task-id", default=None)
@@ -30,11 +32,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
+    if args.ephemeral_root is not None and not args.from_base_ref:
+        print("--ephemeral-root requires --from-base-ref", file=sys.stderr)
+        return 1
     try:
         result = vizline_workflow.run(
             feature_worktree=args.feature_worktree,
             base_ref=args.base_ref,
             ephemeral_root_override=args.ephemeral_root,
+            from_base_ref=args.from_base_ref,
             task_title=args.task_title,
             task_description=args.task_description,
             task_id=args.task_id,
