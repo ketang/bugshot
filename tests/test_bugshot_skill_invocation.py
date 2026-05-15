@@ -23,7 +23,7 @@ def test_bugshot_skill_forbids_rtk_gallery_invocation_prefix() -> None:
     for wrapped_invocation in WRAPPED_GALLERY_INVOCATIONS:
         assert wrapped_invocation not in skill
     assert "Do not prefix this gallery process invocation with `python3`, `rtk`" in normalized_skill
-    assert "Do not prefix the gallery process invocation with `rtk`" in codex_overlay
+    assert "Do not prefix the gallery process invocation with `python3` or `rtk`" in codex_overlay
 
 
 def test_bugshot_cli_is_executable_for_direct_skill_invocation() -> None:

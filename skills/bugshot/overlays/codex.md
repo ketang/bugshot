@@ -8,10 +8,11 @@ CLI process to exit. If needed, keep the shell session open and poll it until
 the process exits. As soon as the CLI exits, parse the final JSON line from
 stdout.
 
-Do not prefix the gallery process invocation with `rtk`, even in repositories
-whose local agent instructions normally require `rtk` before shell commands.
-Invoke Bugshot's `python3 .../bugshot_cli.py --json ...` command directly so the
-gallery process is the actual child process.
+Do not prefix the gallery process invocation with `python3` or `rtk`, even in
+repositories whose local agent instructions normally require `rtk` before shell
+commands. Invoke Bugshot's executable `.../bugshot_cli.py --json ...` script
+directly so Codex agent permissions can scope to that script and the gallery
+process is the actual child process.
 
 If `draft_count > 0`, inspect every `image_path` or `asset_paths` entry, group
 related comments into coherent issues when they describe the same defect, check
