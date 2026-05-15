@@ -79,9 +79,12 @@ def run_review_session(
     open_browser: bool = DEFAULT_BROWSER_OPEN_ENABLED,
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     json_output: bool = False,
+    session_dir: str | None = None,
 ) -> int:
     try:
-        server = gallery_server.create_server(screenshot_dir, bind_address=bind_address)
+        server = gallery_server.create_server(
+            screenshot_dir, bind_address=bind_address, session_dir=session_dir
+        )
     except ValueError as error:
         io.write_error(str(error))
         return 1
@@ -114,6 +117,9 @@ def run_review_session(
         draft_output_path = _write_draft_json_file(payload)
         io.write(f"Bugshot session complete. Produced {summary.draft_count} issue drafts.")
         io.write(f"Bugshot issue draft JSON written to {draft_output_path}")
+        io.write(
+            f"Bugshot session artifacts retained in {os.path.dirname(server.db_path)}"
+        )
         io.write(f"Bugshot temporary database retained at {server.db_path}")
         if json_output:
             io.write_json(payload)

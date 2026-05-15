@@ -4,7 +4,8 @@ import stat
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GALLERY_INVOCATION = (
-    '{{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory}}'
+    '{{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" '
+    '--session-dir "$session_dir" {{directory}}'
 )
 WRAPPED_GALLERY_INVOCATIONS = (
     f"rtk {GALLERY_INVOCATION}",
@@ -20,6 +21,7 @@ def test_bugshot_skill_forbids_rtk_gallery_invocation_prefix() -> None:
     normalized_skill = " ".join(skill.split())
 
     assert GALLERY_INVOCATION in skill
+    assert 'session_dir="$(mktemp -d -t bugshot-session.XXXXXX)"' in skill
     for wrapped_invocation in WRAPPED_GALLERY_INVOCATIONS:
         assert wrapped_invocation not in skill
     assert "Do not prefix this gallery process invocation with `python3`, `rtk`" in normalized_skill

@@ -123,7 +123,13 @@ def test_cli_emits_ansi_draft(repo_root, workflow_screenshot_dir):
 
 
 def test_cli_json_output(repo_root, workflow_screenshot_dir):
-    process = _start_cli(repo_root, workflow_screenshot_dir, extra_args=["--json"])
+    session_dir = os.path.join(workflow_screenshot_dir, "session-artifacts")
+    os.mkdir(session_dir)
+    process = _start_cli(
+        repo_root,
+        workflow_screenshot_dir,
+        extra_args=["--json", "--session-dir", session_dir],
+    )
     gallery_url, initial_stderr = _read_gallery_url(process, source="stderr")
 
     _post_json(
@@ -174,6 +180,11 @@ def test_cli_json_output(repo_root, workflow_screenshot_dir):
 
     assert os.path.exists(output_path)
     assert os.path.exists(db_path)
+    assert os.path.dirname(db_path) == session_dir
+    root_sidecar_path = os.path.splitext(db_path)[0] + ".root"
+    assert os.path.exists(root_sidecar_path)
+    with open(root_sidecar_path, "r", encoding="utf-8") as f:
+        assert f.read() == f"{workflow_screenshot_dir}\n"
     with open(output_path, "r", encoding="utf-8") as f:
         assert json.load(f) == payload
 

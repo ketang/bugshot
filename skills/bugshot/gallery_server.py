@@ -1158,11 +1158,15 @@ class GalleryServer:
         _unlink_if_exists(self.review_root_sidecar_path)
 
 
-def create_server(screenshot_dir, bind_address="0.0.0.0"):
+def create_server(screenshot_dir, bind_address="0.0.0.0", session_dir=None):
     """Create and start a gallery server in a background thread."""
     directory = os.path.abspath(screenshot_dir)
     if not os.path.isdir(directory):
         raise ValueError(f"Not a directory: {directory}")
+    if session_dir is not None:
+        session_dir = os.path.abspath(session_dir)
+        if not os.path.isdir(session_dir):
+            raise ValueError(f"Not a session artifact directory: {session_dir}")
 
     units = discover_review_units(directory)
     if not units:
@@ -1172,7 +1176,9 @@ def create_server(screenshot_dir, bind_address="0.0.0.0"):
     template_dir = os.path.join(script_dir, "templates")
     static_dir = os.path.join(script_dir, "static")
 
-    db_fd, db_path = tempfile.mkstemp(prefix=_session_database_prefix(), suffix=".db")
+    db_fd, db_path = tempfile.mkstemp(
+        prefix=_session_database_prefix(), suffix=".db", dir=session_dir
+    )
     os.close(db_fd)
     review_root_sidecar_path = _write_review_root_sidecar(db_path, directory)
     init_db(db_path)
