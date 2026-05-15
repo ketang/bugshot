@@ -48,7 +48,9 @@ bind_address="$({{bugshot_dir}}/select-bind-address)"
    present, it selects `0.0.0.0`; otherwise it selects `127.0.0.1`.
 
 4. Run the CLI in the foreground with `--json --bind "$bind_address"`. This is
-   a blocking call — **do not use background mode**:
+   a blocking call — **do not use background mode**. Do not prefix this gallery
+   process invocation with `rtk` or another command wrapper; run `python3`
+   directly:
 
 ```bash
 python3 {{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory}}
@@ -223,6 +225,11 @@ Run Bugshot with `--json`, immediately print the gallery URL, then wait for the
 CLI process to exit. If needed, keep the shell session open and poll it until
 the process exits. As soon as the CLI exits, parse the final JSON line from
 stdout.
+
+Do not prefix the gallery process invocation with `rtk`, even in repositories
+whose local agent instructions normally require `rtk` before shell commands.
+Invoke Bugshot's `python3 .../bugshot_cli.py --json ...` command directly so the
+gallery process is the actual child process.
 
 If `draft_count > 0`, inspect every `image_path` or `asset_paths` entry, group
 related comments into coherent issues when they describe the same defect, check

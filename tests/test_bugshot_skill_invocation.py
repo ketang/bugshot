@@ -12,8 +12,9 @@ def test_bugshot_skill_forbids_rtk_gallery_invocation_prefix() -> None:
     codex_overlay = (
         REPO_ROOT / "skills" / "bugshot" / "overlays" / "codex.md"
     ).read_text()
+    normalized_skill = " ".join(skill.split())
 
     assert GALLERY_INVOCATION in skill
     assert f"rtk {GALLERY_INVOCATION}" not in skill
-    assert "Do not prefix this gallery process invocation with `rtk`" in skill
+    assert "Do not prefix this gallery process invocation with `rtk`" in normalized_skill
     assert "Do not prefix the gallery process invocation with `rtk`" in codex_overlay
