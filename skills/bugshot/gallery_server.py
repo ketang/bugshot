@@ -5,6 +5,7 @@ Usage: python3 gallery_server.py /path/to/review-root [--bind ADDRESS | --local-
 
 import argparse
 import atexit
+import hashlib
 import html
 import json
 import os
@@ -14,6 +15,7 @@ import sys
 import tempfile
 import threading
 import urllib.parse
+from datetime import datetime
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
@@ -25,6 +27,61 @@ RECOGNIZED_EXTENSIONS = IMAGE_EXTENSIONS | {ANSI_EXTENSION}
 
 HEARTBEAT_INTERVAL_SECONDS = 5
 HEARTBEAT_TIMEOUT_SECONDS = 15
+SESSION_DATABASE_COMPONENT_MAX_LENGTH = 40
+SESSION_DATABASE_PATH_DIGEST_LENGTH = 8
+EXPLICIT_AGENT_ENVIRONMENT_VARIABLES = ("BUGSHOT_AGENT", "AGENT_NAME")
+EXPLICIT_PROJECT_ENVIRONMENT_VARIABLES = ("BUGSHOT_PROJECT", "PROJECT_NAME")
+
+
+def _sanitize_filename_component(value, fallback):
+    component = re.sub(r"[^a-z0-9]+", "-", str(value).strip().lower()).strip("-")
+    if not component:
+        component = fallback
+    component = component[:SESSION_DATABASE_COMPONENT_MAX_LENGTH].rstrip("-")
+    return component or fallback
+
+
+def _detect_agent_name(environ=None):
+    env = environ if environ is not None else os.environ
+    for name in EXPLICIT_AGENT_ENVIRONMENT_VARIABLES:
+        value = env.get(name)
+        if value:
+            return value
+    if any(name.startswith("CODEX_") for name in env):
+        return "codex"
+    if any(name.startswith("CLAUDE") for name in env):
+        return "claude"
+    return "unknown-agent"
+
+
+def _detect_project_name(environ=None, cwd=None):
+    env = environ if environ is not None else os.environ
+    for name in EXPLICIT_PROJECT_ENVIRONMENT_VARIABLES:
+        value = env.get(name)
+        if value:
+            return value
+    project_root = os.path.abspath(cwd if cwd is not None else os.getcwd())
+    return os.path.basename(project_root) or "project"
+
+
+def _review_root_filename_component(review_root):
+    absolute_review_root = os.path.abspath(review_root)
+    basename = os.path.basename(absolute_review_root) or "root"
+    digest = hashlib.sha256(absolute_review_root.encode("utf-8")).hexdigest()[
+        :SESSION_DATABASE_PATH_DIGEST_LENGTH
+    ]
+    label = _sanitize_filename_component(basename, "review-root")
+    return f"{label}-{digest}"
+
+
+def _session_database_prefix(review_root, now=None, environ=None, cwd=None):
+    timestamp = (now if now is not None else datetime.now()).strftime("%Y%m%d_%H%M%S")
+    agent = _sanitize_filename_component(_detect_agent_name(environ), "unknown-agent")
+    project = _sanitize_filename_component(
+        _detect_project_name(environ=environ, cwd=cwd), "project"
+    )
+    review_root_label = _review_root_filename_component(review_root)
+    return f"bugshot_{timestamp}_{agent}_{project}_{review_root_label}_"
 
 
 def discover_images(directory):
@@ -1103,7 +1160,9 @@ def create_server(screenshot_dir, bind_address="0.0.0.0"):
     template_dir = os.path.join(script_dir, "templates")
     static_dir = os.path.join(script_dir, "static")
 
-    db_fd, db_path = tempfile.mkstemp(prefix="bugshot_", suffix=".db")
+    db_fd, db_path = tempfile.mkstemp(
+        prefix=_session_database_prefix(directory), suffix=".db"
+    )
     os.close(db_fd)
     init_db(db_path)
 
