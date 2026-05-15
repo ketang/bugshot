@@ -416,8 +416,7 @@ def test_grouped_unit_does_not_infer_reference_asset_without_manifest_field(tmp_
         assert server.units[0]["reference_asset_relative_path"] is None
     finally:
         server.shutdown()
-        if os.path.exists(server.db_path):
-            os.unlink(server.db_path)
+        server.cleanup_temporary_files()
 
 
 def test_temporary_database_filename_carries_session_context(tmp_path, monkeypatch):
@@ -438,7 +437,10 @@ def test_temporary_database_filename_carries_session_context(tmp_path, monkeypat
             filename,
         )
         assert "checkout-screens" not in filename
-        assert server.review_root_sidecar_path == os.path.splitext(server.db_path)[0] + ".root"
+        assert (
+            server.review_root_sidecar_path
+            == os.path.splitext(server.db_path)[0] + ".root"
+        )
         assert os.path.exists(server.review_root_sidecar_path)
         with open(server.review_root_sidecar_path, encoding="utf-8") as f:
             assert f.read() == f"{os.path.abspath(review_root)}\n"
