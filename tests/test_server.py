@@ -56,6 +56,17 @@ def _delete(url):
         return e.code
 
 
+def _write_png(path):
+    path.write_bytes(
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x02\x00\x00\x00\x90wS\xde"
+        b"\x00\x00\x00\x0cIDATx"
+        b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+
+
 def _read_comments(db_path):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -403,6 +414,30 @@ def test_grouped_unit_does_not_infer_reference_asset_without_manifest_field(tmp_
     server = gallery_server.create_server(str(tmp_path))
     try:
         assert server.units[0]["reference_asset_relative_path"] is None
+    finally:
+        server.shutdown()
+        if os.path.exists(server.db_path):
+            os.unlink(server.db_path)
+
+
+def test_temporary_database_filename_carries_session_context(tmp_path, monkeypatch):
+    project_dir = tmp_path / "Demo Project"
+    project_dir.mkdir()
+    review_root = tmp_path / "Checkout Screens"
+    review_root.mkdir()
+    _write_png(review_root / "page.png")
+
+    monkeypatch.chdir(project_dir)
+    monkeypatch.setenv("BUGSHOT_AGENT", "Codex Runner")
+
+    server = gallery_server.create_server(str(review_root))
+    try:
+        filename = os.path.basename(server.db_path)
+        assert re.match(
+            r"bugshot_\d{8}_\d{6}_codex-runner_demo-project_"
+            r"checkout-screens-[0-9a-f]{8}_[a-z0-9_]+\.db$",
+            filename,
+        )
     finally:
         server.shutdown()
         if os.path.exists(server.db_path):
