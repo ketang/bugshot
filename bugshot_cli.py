@@ -65,6 +65,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Emit a single JSON object on stdout instead of markdown text",
     )
+    parser.add_argument(
+        "--session-dir",
+        help="Directory for retained Bugshot session artifacts",
+    )
     return parser.parse_args()
 
 
@@ -80,6 +84,9 @@ def main() -> int:
     if refusal is not None:
         io.write_error(refusal)
         return 2
+    if args.session_dir is not None and not os.path.isdir(args.session_dir):
+        io.write_error(f"Not a session artifact directory: {args.session_dir}")
+        return 2
 
     bind_address = LOOPBACK_BIND_ADDRESS if args.local_only else args.bind
 
@@ -91,6 +98,7 @@ def main() -> int:
             open_browser=args.open_browser,
             poll_interval_seconds=args.poll_interval,
             json_output=args.json,
+            session_dir=args.session_dir,
         )
     except Exception as error:  # pragma: no cover - top-level CLI handling
         io.write_error(f"Bugshot CLI failed: {error}")

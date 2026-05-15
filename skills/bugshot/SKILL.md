@@ -47,20 +47,29 @@ bind_address="$({{bugshot_dir}}/select-bind-address)"
    in a separate variable before testing them. If a remote-login signal is
    present, it selects `0.0.0.0`; otherwise it selects `127.0.0.1`.
 
-4. Run the CLI in the foreground with `--json --bind "$bind_address"`. This is
-   a blocking call — **do not use background mode**. Do not prefix this gallery
-   process invocation with `python3`, `rtk`, or another command wrapper; invoke
-   the executable script directly:
+4. Create a session artifact directory before launching the CLI, and keep the
+   path visible in the agent conversation or notes. Bugshot retains its
+   temporary SQLite database and `.root` review-root sidecar in this directory:
 
 ```bash
-{{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory}}
+session_dir="$(mktemp -d -t bugshot-session.XXXXXX)"
+```
+
+5. Run the CLI in the foreground with `--json --bind "$bind_address"` and
+   `--session-dir "$session_dir"`. This is a blocking call — **do not use
+   background mode**. Do not prefix this gallery process invocation with
+   `python3`, `rtk`, or another command wrapper; invoke the executable script
+   directly:
+
+```bash
+{{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" --session-dir "$session_dir" {{directory}}
 ```
 
    The CLI blocks until the user finishes reviewing and the session ends. In
    Claude Code the Bash tool streams stderr in real time, so the gallery URL
    appears in the tool output while the command is still running.
 
-5. The first line of the CLI's stderr is `Gallery is running at <url>`. Once
+6. The first line of the CLI's stderr is `Gallery is running at <url>`. Once
    the tool call returns (after the user has finished reviewing), print the URL
    in the visible conversation and tell the user what happened:
 
@@ -71,7 +80,7 @@ bind_address="$({{bugshot_dir}}/select-bind-address)"
    on the network. Otherwise it binds to `127.0.0.1`. If the user explicitly
    requests a bind mode, honor that request instead of using the helper.
 
-6. The CLI exits on its own when the user clicks "Done Reviewing" (or when the
+7. The CLI exits on its own when the user clicks "Done Reviewing" (or when the
    heartbeat times out). The foreground Bash call returns at that point. The
    CLI handles all polling and browser lifecycle internally — do not poll any
    HTTP endpoints yourself.
@@ -92,6 +101,10 @@ reports it on stderr as:
 ```text
 Bugshot temporary database retained at <path>
 ```
+
+The retained database and its `.root` sidecar are written under the
+`session_dir` created before launch. The sidecar shares the database stem with
+a `.root` extension and contains the absolute review-root directory path.
 
 Flat screenshot mode preserves the legacy per-image draft shape, while
 grouped-unit mode emits unit context:
