@@ -464,6 +464,23 @@ def test_temporary_file_cleanup_removes_database_and_review_root_sidecar(screens
     assert not os.path.exists(sidecar_path)
 
 
+def test_temporary_files_can_use_explicit_session_directory(screenshot_dir, tmp_path):
+    session_dir = tmp_path / "bugshot-session"
+    session_dir.mkdir()
+
+    server = gallery_server.create_server(screenshot_dir, session_dir=str(session_dir))
+    try:
+        assert os.path.dirname(server.db_path) == str(session_dir)
+        assert os.path.dirname(server.review_root_sidecar_path) == str(session_dir)
+        assert os.path.exists(server.db_path)
+        assert os.path.exists(server.review_root_sidecar_path)
+        with open(server.review_root_sidecar_path, encoding="utf-8") as f:
+            assert f.read() == f"{os.path.abspath(screenshot_dir)}\n"
+    finally:
+        server.shutdown()
+        server.cleanup_temporary_files()
+
+
 def test_gallery_js_wires_copy_filename_shortcut(repo_root):
     script = open(f"{repo_root}/static/gallery.js").read()
     assert 'SHORTCUT_KEY_COPY_FILENAME = "c"' in script
