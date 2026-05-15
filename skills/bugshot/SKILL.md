@@ -49,11 +49,11 @@ bind_address="$({{bugshot_dir}}/select-bind-address)"
 
 4. Run the CLI in the foreground with `--json --bind "$bind_address"`. This is
    a blocking call — **do not use background mode**. Do not prefix this gallery
-   process invocation with `rtk` or another command wrapper; run `python3`
-   directly:
+   process invocation with `python3`, `rtk`, or another command wrapper; invoke
+   the executable script directly:
 
 ```bash
-python3 {{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory}}
+{{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" {{directory}}
 ```
 
    The CLI blocks until the user finishes reviewing and the session ends. In
