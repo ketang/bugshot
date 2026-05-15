@@ -5,7 +5,6 @@ Usage: python3 gallery_server.py /path/to/review-root [--bind ADDRESS | --local-
 
 import argparse
 import atexit
-import hashlib
 import html
 import json
 import os
@@ -28,7 +27,7 @@ RECOGNIZED_EXTENSIONS = IMAGE_EXTENSIONS | {ANSI_EXTENSION}
 HEARTBEAT_INTERVAL_SECONDS = 5
 HEARTBEAT_TIMEOUT_SECONDS = 15
 SESSION_DATABASE_COMPONENT_MAX_LENGTH = 40
-SESSION_DATABASE_PATH_DIGEST_LENGTH = 8
+REVIEW_ROOT_SIDECAR_EXTENSION = ".root"
 EXPLICIT_AGENT_ENVIRONMENT_VARIABLES = ("BUGSHOT_AGENT", "AGENT_NAME")
 EXPLICIT_PROJECT_ENVIRONMENT_VARIABLES = ("BUGSHOT_PROJECT", "PROJECT_NAME")
 
@@ -64,24 +63,30 @@ def _detect_project_name(environ=None, cwd=None):
     return os.path.basename(project_root) or "project"
 
 
-def _review_root_filename_component(review_root):
-    absolute_review_root = os.path.abspath(review_root)
-    basename = os.path.basename(absolute_review_root) or "root"
-    digest = hashlib.sha256(absolute_review_root.encode("utf-8")).hexdigest()[
-        :SESSION_DATABASE_PATH_DIGEST_LENGTH
-    ]
-    label = _sanitize_filename_component(basename, "review-root")
-    return f"{label}-{digest}"
-
-
-def _session_database_prefix(review_root, now=None, environ=None, cwd=None):
+def _session_database_prefix(now=None, environ=None, cwd=None):
     timestamp = (now if now is not None else datetime.now()).strftime("%Y%m%d_%H%M%S")
     agent = _sanitize_filename_component(_detect_agent_name(environ), "unknown-agent")
     project = _sanitize_filename_component(
         _detect_project_name(environ=environ, cwd=cwd), "project"
     )
-    review_root_label = _review_root_filename_component(review_root)
-    return f"bugshot_{timestamp}_{agent}_{project}_{review_root_label}_"
+    return f"bugshot_{timestamp}_{agent}_{project}_"
+
+
+def _review_root_sidecar_path(db_path):
+    return os.path.splitext(db_path)[0] + REVIEW_ROOT_SIDECAR_EXTENSION
+
+
+def _write_review_root_sidecar(db_path, review_root):
+    sidecar_path = _review_root_sidecar_path(db_path)
+    with open(sidecar_path, "w", encoding="utf-8") as f:
+        f.write(os.path.abspath(review_root))
+        f.write("\n")
+    return sidecar_path
+
+
+def _unlink_if_exists(path):
+    if os.path.exists(path):
+        os.unlink(path)
 
 
 def discover_images(directory):
@@ -1131,11 +1136,14 @@ def init_db(db_path):
 class GalleryServer:
     """Running gallery server. Holds httpd, serving thread, and resources."""
 
-    def __init__(self, httpd, thread, url, db_path, units, review_root):
+    def __init__(
+        self, httpd, thread, url, db_path, review_root_sidecar_path, units, review_root
+    ):
         self.httpd = httpd
         self.thread = thread
         self.url = url
         self.db_path = db_path
+        self.review_root_sidecar_path = review_root_sidecar_path
         self.units = units
         self.images = [unit["id"] for unit in units]
         self.screenshot_dir = review_root
@@ -1144,6 +1152,10 @@ class GalleryServer:
         self.httpd.shutdown()
         self.httpd.server_close()
         self.thread.join(timeout=5)
+
+    def cleanup_temporary_files(self):
+        _unlink_if_exists(self.db_path)
+        _unlink_if_exists(self.review_root_sidecar_path)
 
 
 def create_server(screenshot_dir, bind_address="0.0.0.0"):
@@ -1160,10 +1172,9 @@ def create_server(screenshot_dir, bind_address="0.0.0.0"):
     template_dir = os.path.join(script_dir, "templates")
     static_dir = os.path.join(script_dir, "static")
 
-    db_fd, db_path = tempfile.mkstemp(
-        prefix=_session_database_prefix(directory), suffix=".db"
-    )
+    db_fd, db_path = tempfile.mkstemp(prefix=_session_database_prefix(), suffix=".db")
     os.close(db_fd)
+    review_root_sidecar_path = _write_review_root_sidecar(db_path, directory)
     init_db(db_path)
 
     handler_cls = type(
@@ -1186,7 +1197,9 @@ def create_server(screenshot_dir, bind_address="0.0.0.0"):
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
 
-    return GalleryServer(httpd, thread, url, db_path, units, directory)
+    return GalleryServer(
+        httpd, thread, url, db_path, review_root_sidecar_path, units, directory
+    )
 
 
 def main():
@@ -1213,9 +1226,7 @@ def main():
         print(json.dumps({"error": str(error)}), flush=True)
         sys.exit(1)
 
-    atexit.register(
-        lambda: os.unlink(server.db_path) if os.path.exists(server.db_path) else None
-    )
+    atexit.register(server.cleanup_temporary_files)
 
     print(
         json.dumps(

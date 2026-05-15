@@ -170,8 +170,7 @@ def server(screenshot_dir):
         yield running
     finally:
         running.shutdown()
-        if os.path.exists(running.db_path):
-            os.unlink(running.db_path)
+        running.cleanup_temporary_files()
 
 
 @pytest.fixture
@@ -182,8 +181,7 @@ def grouped_server(review_units_dir):
         yield running
     finally:
         running.shutdown()
-        if os.path.exists(running.db_path):
-            os.unlink(running.db_path)
+        running.cleanup_temporary_files()
 
 
 @pytest.fixture

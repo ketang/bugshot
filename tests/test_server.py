@@ -416,8 +416,7 @@ def test_grouped_unit_does_not_infer_reference_asset_without_manifest_field(tmp_
         assert server.units[0]["reference_asset_relative_path"] is None
     finally:
         server.shutdown()
-        if os.path.exists(server.db_path):
-            os.unlink(server.db_path)
+        server.cleanup_temporary_files()
 
 
 def test_temporary_database_filename_carries_session_context(tmp_path, monkeypatch):
@@ -434,14 +433,35 @@ def test_temporary_database_filename_carries_session_context(tmp_path, monkeypat
     try:
         filename = os.path.basename(server.db_path)
         assert re.match(
-            r"bugshot_\d{8}_\d{6}_codex-runner_demo-project_"
-            r"checkout-screens-[0-9a-f]{8}_[a-z0-9_]+\.db$",
+            r"bugshot_\d{8}_\d{6}_codex-runner_demo-project_[a-z0-9_]+\.db$",
             filename,
         )
+        assert "checkout-screens" not in filename
+        assert (
+            server.review_root_sidecar_path
+            == os.path.splitext(server.db_path)[0] + ".root"
+        )
+        assert os.path.exists(server.review_root_sidecar_path)
+        with open(server.review_root_sidecar_path, encoding="utf-8") as f:
+            assert f.read() == f"{os.path.abspath(review_root)}\n"
     finally:
         server.shutdown()
-        if os.path.exists(server.db_path):
-            os.unlink(server.db_path)
+        server.cleanup_temporary_files()
+
+
+def test_temporary_file_cleanup_removes_database_and_review_root_sidecar(screenshot_dir):
+    server = gallery_server.create_server(screenshot_dir)
+    db_path = server.db_path
+    sidecar_path = server.review_root_sidecar_path
+
+    assert os.path.exists(db_path)
+    assert os.path.exists(sidecar_path)
+
+    server.shutdown()
+    server.cleanup_temporary_files()
+
+    assert not os.path.exists(db_path)
+    assert not os.path.exists(sidecar_path)
 
 
 def test_gallery_js_wires_copy_filename_shortcut(repo_root):
