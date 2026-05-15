@@ -22,7 +22,9 @@ rendered output. Vizdiff requires a baseline produced upstream by `vizline`.
 Skip when:
 
 - No baseline exists at `.bugshot/baseline/manifest.json` (run `bento:vizline`
-  first, or pass `--head-only` for plain HEAD capture without comparison).
+  first at branch start. If work has already begun, run
+  `bento:vizline --feature-worktree <path> --from-base-ref` instead. Pass
+  `--head-only` only for plain HEAD capture without comparison).
 - The branch is verifiably non-rendering — backend-only changes with no UI,
   template, or design-system impact.
 
@@ -32,6 +34,10 @@ Skip when:
 - `.agent-plugins/bento/bugshot/viz/capture-command` must exist and be executable.
 - A baseline at `.bugshot/baseline/` (created via `bento:vizline`) is required
   unless `--head-only` or `--base-dir` is passed.
+- Default vizline baselines are branch-start captures from a clean feature
+  worktree. When vizdiff finds no baseline after feature edits already exist,
+  create one with vizline's explicit `--from-base-ref` mode so the baseline
+  comes from the base ref, not from modified HEAD.
 - For manifest mode, none of the capture prerequisites are required. The
   manifest contract is documented in
   `docs/specs/2026-05-01-vizdiff-manifest.md`.

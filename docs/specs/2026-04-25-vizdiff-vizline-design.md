@@ -34,8 +34,8 @@ A target project opts into the family by shipping a small contract under `.agent
 |   (launch-work etc) |                                     |    (CLI + skill)    |
 +---------------------+                                     +----------+----------+
                                                                        |
-                                                                       | git worktree add (ephemeral, base ref)
-                                                                       | run capture-command
+                                                                       | run capture-command in feature worktree
+                                                                       | (--from-base-ref uses ephemeral worktree)
                                                                        | manifest + images
                                                                        v
                                                             <feature-worktree>/.bugshot/baseline/
@@ -147,7 +147,8 @@ Locates the worktree-placement convention the target project wants vizline to us
 vizline_cli.py \
   --feature-worktree <path>            # required
   [--base-ref <ref>]                    # default: merge-base with main
-  [--ephemeral-root <path>]             # override discovery cascade
+  [--from-base-ref]                     # use temporary base-ref worktree
+  [--ephemeral-root <path>]             # with --from-base-ref, override discovery cascade
   [--task-title <str>]                  # forwarded as BUGSHOT_TASK_TITLE
   [--task-description <str>]            # forwarded as BUGSHOT_TASK_DESCRIPTION
   [--task-id <str>]                     # forwarded as BUGSHOT_TASK_ID
@@ -159,24 +160,25 @@ vizline_cli.py \
 
 1. Validate `--feature-worktree` exists and is a git worktree. Resolve `--base-ref` to a SHA via `git rev-parse` inside the feature worktree.
 2. If `<feature-worktree>/.agent-plugins/bento/bugshot/viz/should-baseline` exists and `--force` was not passed, run it with the env-var contract above. Exit 1 → skip cleanly with reason on stdout. Other non-zero → error.
-3. Determine ephemeral root via discovery cascade:
+3. Default branch-start mode requires `HEAD == <base-sha>` and a clean worktree, excluding `.bugshot/`. Locate `capture-command` in the feature worktree, run it with output at `<feature-worktree>/.bugshot-output/`, assemble `.bugshot/baseline.tmp/`, then atomically promote it to `.bugshot/baseline/`.
+4. With `--from-base-ref`, determine ephemeral root via discovery cascade:
    1. `--ephemeral-root <path>` flag
    2. `BUGSHOT_EPHEMERAL_ROOT` env var
    3. `<feature-worktree>/.agent-plugins/bento/bugshot/viz/ephemeral-root` script output
    4. `tempfile.mkdtemp(prefix="bugshot-baseline-")`
-4. Acquire lock at `<feature-worktree>/.bugshot/baseline.lock` via `fcntl.flock(fd, LOCK_EX | LOCK_NB)` on an open-and-held file descriptor; refuse to start if held. The kernel releases the lock automatically when the process exits for any reason (clean exit, exception, SIGKILL, OOM, host crash) — no stale-lock cleanup needed. The lock file itself is left on disk; it's the file descriptor that holds the lock, not the file's existence.
-5. `git worktree add --detach <ephemeral>/<short-sha>-<pid> <base-sha>` from inside the feature worktree.
-6. Locate `capture-command` in the ephemeral worktree at the same `.agent-plugins/bento/bugshot/viz/` path. Missing → error: *"capture-command does not exist at base ref `<ref>`. Land it on the base branch first, or pass `--base <ref-with-capture-command>`."*
-7. `mkdir <ephemeral>/.bugshot-output/`. Run `capture-command <output-dir>` with stdout/stderr streamed through to vizline's caller.
-8. Capture-command non-zero exit → error, surface stderr, clean up ephemeral worktree before exiting.
-9. Compute SHA-256 for each captured image; build `manifest.json`.
-10. Atomic write: assemble in `<feature-worktree>/.bugshot/baseline.tmp/`, then `os.rename()` to `.bugshot/baseline/`. `--refresh` removes the existing target *only after* `.tmp/` is fully written.
-11. `git worktree remove --force <ephemeral>` (cleanup runs on every exit path, success or failure).
-12. Release lock; print summary: `Baseline written: 42 images, base=<sha>, dir=<feature-worktree>/.bugshot/baseline/`.
+5. Acquire lock at `<feature-worktree>/.bugshot/baseline.lock` via `fcntl.flock(fd, LOCK_EX | LOCK_NB)` on an open-and-held file descriptor; refuse to start if held. The kernel releases the lock automatically when the process exits for any reason (clean exit, exception, SIGKILL, OOM, host crash) — no stale-lock cleanup needed. The lock file itself is left on disk; it's the file descriptor that holds the lock, not the file's existence.
+6. With `--from-base-ref`, `git worktree add --detach <ephemeral>/<short-sha>-<pid> <base-sha>` from inside the feature worktree.
+7. With `--from-base-ref`, locate `capture-command` in the ephemeral worktree at the same `.agent-plugins/bento/bugshot/viz/` path. Missing → error: *"capture-command does not exist at base ref `<ref>`. Land it on the base branch first, or pass `--base <ref-with-capture-command>`."*
+8. With `--from-base-ref`, `mkdir <ephemeral>/.bugshot-output/`. Run `capture-command <output-dir>` with stdout/stderr streamed through to vizline's caller, then copy captured images into `<feature-worktree>/.bugshot/baseline.tmp/images/`.
+9. Capture-command non-zero exit → error, surface stderr, clean up temporary output and any ephemeral worktree before exiting.
+10. Compute SHA-256 for each captured image; build `manifest.json`.
+11. Atomic write: assemble in `<feature-worktree>/.bugshot/baseline.tmp/`, then `os.rename()` to `.bugshot/baseline/`. `--refresh` removes the existing target *only after* `.tmp/` is fully written.
+12. With `--from-base-ref`, `git worktree remove --force <ephemeral>` (cleanup runs on every exit path, success or failure).
+13. Release lock; print summary: `Baseline written: 42 images, base=<sha>, dir=<feature-worktree>/.bugshot/baseline/`.
 
 ### Errors — single rule
 
-**No partial baselines.** Any failure deletes both the ephemeral worktree and `.bugshot/baseline.tmp/` before exit, leaving the feature worktree as it was. The `.bugshot/baseline/` directory only ever appears as a complete, manifest-validated set.
+**No partial baselines.** Any failure deletes temporary capture output, the ephemeral worktree when one was created, and `.bugshot/baseline.tmp/` before exit, leaving the feature worktree as it was. The `.bugshot/baseline/` directory only ever appears as a complete, manifest-validated set.
 
 ### Trigger model
 
@@ -213,9 +215,10 @@ Vizdiff intentionally does **not** support `--refresh-baseline` or `--no-baselin
 
      ```
      No baseline found at .bugshot/baseline/ (or stale: captured at <old-sha>, base now <new-sha>).
-       Create one via:        bento:vizline --feature-worktree <path>
-       Or supply manually:    --base-dir <path-to-prebuilt-base-screenshots>
-       Or skip diff entirely: --head-only
+      Create one at branch start via: bento:vizline --feature-worktree <path>
+      If work already began:          bento:vizline --feature-worktree <path> --from-base-ref
+      Or supply manually:    --base-dir <path-to-prebuilt-base-screenshots>
+      Or skip diff entirely: --head-only
      ```
 
 2. Acquire lock at `<feature-worktree>/.bugshot/head.lock` via `fcntl.flock(fd, LOCK_EX | LOCK_NB)`. Refuse to start if held — message: *"Another vizdiff run is in progress on this worktree. Wait for it to finish or kill the holder, then retry."* Same kernel-managed semantics as the baseline lock: auto-released on any process exit.

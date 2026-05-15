@@ -301,7 +301,8 @@ def _resolve_baseline_source(
     if not manifest_path.is_file():
         raise VizdiffError(
             f"No baseline found at {baseline_dir}.\n"
-            f"  Create one via:        bento:vizline --feature-worktree {feature_worktree}\n"
+            f"  At branch start:       bento:vizline --feature-worktree {feature_worktree}\n"
+            f"  If work already began: bento:vizline --feature-worktree {feature_worktree} --from-base-ref\n"
             f"  Or supply manually:    --base-dir <path-to-prebuilt-base-screenshots>\n"
             f"  Or skip diff entirely: --head-only"
         )

@@ -32,6 +32,80 @@ def test_vizline_creates_baseline(fake_git_worktree, fake_capture_command):
     assert paths == ["pages/login/desktop.png", "pages/welcome.png"]
 
 
+def test_vizline_default_uses_target_worktree_capture_command(fake_git_worktree, fake_capture_command):
+    fake_capture_command.write_text(
+        "#!/bin/sh\n"
+        "out=\"$1\"\n"
+        "mkdir -p \"$out/pages/login\"\n"
+        "pwd > \"$out/pages/login/desktop.png\"\n"
+    )
+    fake_capture_command.chmod(0o755)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "commit", "-q", "-m", "pwd capture"], check=True)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "checkout", "-q", "-b", "feature/x"], check=True)
+
+    result = run_vizline(["--feature-worktree", str(fake_git_worktree), "--base-ref", "main"])
+
+    assert result.returncode == 0, result.stderr
+    baseline = fake_git_worktree / ".bugshot" / "baseline"
+    assert (baseline / "images" / "pages" / "login" / "desktop.png").read_text().strip() == str(fake_git_worktree)
+    assert not (baseline / "images" / "pages" / "welcome.png").exists()
+
+
+def test_vizline_default_refuses_after_work_begins(fake_git_worktree, fake_capture_command):
+    subprocess.run(["git", "-C", str(fake_git_worktree), "checkout", "-q", "-b", "feature/x"], check=True)
+    fake_capture_command.write_text(
+        "#!/bin/sh\n"
+        "out=\"$1\"\n"
+        "mkdir -p \"$out/pages/login\"\n"
+        "printf 'HEAD-LOGIN' > \"$out/pages/login/desktop.png\"\n"
+    )
+    fake_capture_command.chmod(0o755)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "commit", "-q", "-m", "feature work"], check=True)
+
+    result = run_vizline(["--feature-worktree", str(fake_git_worktree), "--base-ref", "main"])
+
+    assert result.returncode != 0
+    assert "--from-base-ref" in result.stderr
+    assert not (fake_git_worktree / ".bugshot" / "baseline").exists()
+
+
+def test_vizline_from_base_ref_uses_ephemeral_worktree_after_work_begins(fake_git_worktree, fake_capture_command):
+    subprocess.run(["git", "-C", str(fake_git_worktree), "checkout", "-q", "-b", "feature/x"], check=True)
+    fake_capture_command.write_text(
+        "#!/bin/sh\n"
+        "out=\"$1\"\n"
+        "mkdir -p \"$out/pages/login\"\n"
+        "printf 'HEAD-LOGIN' > \"$out/pages/login/desktop.png\"\n"
+    )
+    fake_capture_command.chmod(0o755)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(fake_git_worktree), "commit", "-q", "-m", "feature work"], check=True)
+
+    result = run_vizline([
+        "--feature-worktree", str(fake_git_worktree),
+        "--base-ref", "main",
+        "--from-base-ref",
+    ])
+
+    assert result.returncode == 0, result.stderr
+    baseline = fake_git_worktree / ".bugshot" / "baseline"
+    assert (baseline / "images" / "pages" / "login" / "desktop.png").read_text() == "BASE-LOGIN"
+    assert (baseline / "images" / "pages" / "welcome.png").read_text() == "BASE-WELCOME"
+
+
+def test_vizline_from_base_ref_errors_when_capture_command_missing_at_base(fake_git_worktree):
+    """No capture-command was ever committed → base-ref capture must error with guidance."""
+    result = run_vizline([
+        "--feature-worktree", str(fake_git_worktree),
+        "--base-ref", "main",
+        "--from-base-ref",
+    ])
+    assert result.returncode != 0
+    assert "capture-command" in result.stderr.lower()
+
+
 def test_vizline_writes_gitignore_inside_dot_bugshot(fake_git_worktree, fake_capture_command):
     run_vizline(["--feature-worktree", str(fake_git_worktree), "--base-ref", "main"])
     assert (fake_git_worktree / ".bugshot" / ".gitignore").read_text() == "*\n"
@@ -81,8 +155,7 @@ def test_vizline_force_ignores_should_baseline_skip(fake_git_worktree, fake_capt
     assert (fake_git_worktree / ".bugshot" / "baseline" / "manifest.json").is_file()
 
 
-def test_vizline_capture_command_missing_at_base_errors(fake_git_worktree):
-    """No capture-command was ever committed → vizline must error with guidance."""
+def test_vizline_capture_command_missing_errors(fake_git_worktree):
     result = run_vizline(["--feature-worktree", str(fake_git_worktree), "--base-ref", "main"])
     assert result.returncode != 0
     assert "capture-command" in result.stderr.lower()
