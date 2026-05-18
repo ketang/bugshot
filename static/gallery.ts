@@ -300,6 +300,9 @@ interface GalleryTestHooks {
         if (event.key === SHORTCUT_KEY_SIZE && isIndex) {
             toggleIndexSize();
             event.preventDefault();
+        } else if (event.key === SHORTCUT_KEY_SIZE && isDetail) {
+            toggleDetailSize();
+            event.preventDefault();
         } else if (event.key === SHORTCUT_KEY_THEME && !hasModifier) {
             cycleTheme();
             event.preventDefault();
@@ -2095,6 +2098,11 @@ interface GalleryTestHooks {
             copyFilenameButton.addEventListener("click", copyFilenameToClipboard);
         }
 
+        var detailSizeToggle = document.getElementById("detail-size-toggle");
+        if (detailSizeToggle) {
+            detailSizeToggle.addEventListener("click", toggleDetailSize);
+        }
+
         var commentForm = document.getElementById("comment-form") as HTMLFormElement;
         var commentInput = document.getElementById("comment-input") as HTMLInputElement;
         var commentSubmit = commentForm.querySelector("button[type='submit']") as HTMLButtonElement | null;
@@ -2648,6 +2656,21 @@ interface GalleryTestHooks {
         gallery.classList.toggle("thumbnail-mode", !nextFullSizeState);
         gallery.classList.toggle("fullsize-mode", nextFullSizeState);
         sizeToggle.textContent = nextFullSizeState ? "Thumbnails" : "Full Size";
+    }
+
+    function toggleDetailSize() {
+        if (!isDetail) {
+            return;
+        }
+
+        var assets = document.getElementById("unit-assets");
+        var sizeToggle = document.getElementById("detail-size-toggle");
+        var nextFullSizeState = !assets.classList.contains("detail-fullsize-mode");
+
+        assets.classList.toggle("detail-fullsize-mode", nextFullSizeState);
+        if (sizeToggle) {
+            sizeToggle.textContent = nextFullSizeState ? "Constrained" : "Full Size";
+        }
     }
 
     function focusCommentInput() {
