@@ -500,6 +500,16 @@ header h1 {
     overflow: auto;
 }
 
+#unit-assets.detail-fullsize-mode {
+    grid-template-columns: max-content;
+    overflow-x: auto;
+}
+
+#unit-assets.detail-fullsize-mode .asset-card img {
+    width: auto;
+    max-width: none;
+}
+
 .svg-rendered img,
 .svg-rendered .svg-asset {
     width: 100%;
