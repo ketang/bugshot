@@ -266,7 +266,7 @@ SKILL_PLUGINS = {
             "bugshot_workflow.py",
             "ansi_render.py",
         ],
-        "skill_files": [],
+        "skill_files": ["select-bind-address"],
         "trees": ["static", "templates"],
     },
 }
@@ -357,7 +357,7 @@ def write_skill_runtime(
             print(f"  wrote {target.relative_to(ROOT)}/")
 
     for filename in spec.get("skill_files", []):
-        source = skill_dir(skill_name) / filename
+        source = skill_file_source(skill_name, filename)
         if not source.exists():
             raise SystemExit(f"skills/{skill_name}/{filename} is missing")
         target = target_dir / filename
@@ -368,6 +368,12 @@ def write_skill_runtime(
         shutil.copy(source, target)
         if verbose:
             print(f"  wrote {target.relative_to(ROOT)}")
+
+
+def skill_file_source(skill_name: str, filename: str) -> Path:
+    if skill_name == "vizdiff" and filename == "select-bind-address":
+        return skill_dir("bugshot") / filename
+    return skill_dir(skill_name) / filename
 
 
 def write_one_skill_dir(skill_name: str, spec: dict, verbose: bool = False) -> None:

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+remote_login_signals="${SSH_CONNECTION:-}${SSH_CLIENT:-}${SSH_TTY:-}"
+
+if [ -n "$remote_login_signals" ]; then
+    bind_address="0.0.0.0"
+    reason="SSH login environment variable was present"
+else
+    bind_address="127.0.0.1"
+    reason="no SSH login environment variables were present"
+fi
+
+printf 'Bugshot bind selection: using %s (%s).\n' "$bind_address" "$reason" >&2
+printf '%s\n' "$bind_address"

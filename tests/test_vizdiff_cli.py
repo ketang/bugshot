@@ -92,6 +92,121 @@ def test_vizdiff_errors_clearly_when_baseline_missing(fake_git_worktree, fake_ca
     assert "--from-base-ref" in result.stderr
 
 
+def test_vizdiff_cli_uses_bind_selector_by_default(tmp_path, monkeypatch):
+    import vizdiff_cli
+
+    selected = []
+
+    monkeypatch.setattr(
+        vizdiff_cli.vizdiff_workflow,
+        "build_review_root_from_manifest",
+        lambda manifest: tmp_path,
+    )
+    monkeypatch.setattr(vizdiff_cli, "select_bind_address", lambda: "127.0.0.1")
+    monkeypatch.setattr(
+        vizdiff_cli.bugshot_workflow,
+        "run_review_session",
+        lambda **kwargs: selected.append(kwargs["bind_address"]) or 0,
+    )
+
+    assert vizdiff_cli.main(["--manifest", str(tmp_path / "manifest.json"), "--json"]) == 0
+    assert selected == ["127.0.0.1"]
+
+
+def test_vizdiff_cli_default_bind_keeps_helper_stderr_before_gallery_url(
+    tmp_path, monkeypatch, capfd
+):
+    import vizdiff_cli
+
+    helper = tmp_path / "select-bind-address"
+    helper.write_text(
+        "#!/bin/sh\n"
+        "printf 'Bugshot bind selection: using 127.0.0.1 (test).\\n' >&2\n"
+        "printf '127.0.0.1\\n'\n"
+    )
+    helper.chmod(0o755)
+
+    monkeypatch.setattr(
+        vizdiff_cli.vizdiff_workflow,
+        "build_review_root_from_manifest",
+        lambda manifest: tmp_path,
+    )
+    monkeypatch.setattr(vizdiff_cli, "bind_selector_path", lambda: helper)
+
+    def fake_review_session(**kwargs):
+        print("Gallery is running at http://127.0.0.1:12345", file=sys.stderr)
+        return 0
+
+    monkeypatch.setattr(
+        vizdiff_cli.bugshot_workflow,
+        "run_review_session",
+        fake_review_session,
+    )
+
+    assert vizdiff_cli.main(["--manifest", str(tmp_path / "manifest.json"), "--json"]) == 0
+    stderr_lines = capfd.readouterr().err.splitlines()
+    assert stderr_lines[0].startswith("Bugshot bind selection:")
+    assert "Gallery is running at http://127.0.0.1:12345" in stderr_lines
+
+
+def test_vizdiff_cli_preserves_explicit_bind_override(tmp_path, monkeypatch):
+    import vizdiff_cli
+
+    selected = []
+
+    monkeypatch.setattr(
+        vizdiff_cli.vizdiff_workflow,
+        "build_review_root_from_manifest",
+        lambda manifest: tmp_path,
+    )
+    monkeypatch.setattr(
+        vizdiff_cli,
+        "select_bind_address",
+        lambda: pytest.fail("explicit --bind should not call the selector"),
+    )
+    monkeypatch.setattr(
+        vizdiff_cli.bugshot_workflow,
+        "run_review_session",
+        lambda **kwargs: selected.append(kwargs["bind_address"]) or 0,
+    )
+
+    assert vizdiff_cli.main([
+        "--manifest", str(tmp_path / "manifest.json"),
+        "--bind", "0.0.0.0",
+        "--json",
+    ]) == 0
+    assert selected == ["0.0.0.0"]
+
+
+def test_vizdiff_cli_preserves_local_only_override(tmp_path, monkeypatch):
+    import vizdiff_cli
+
+    selected = []
+
+    monkeypatch.setattr(
+        vizdiff_cli.vizdiff_workflow,
+        "build_review_root_from_manifest",
+        lambda manifest: tmp_path,
+    )
+    monkeypatch.setattr(
+        vizdiff_cli,
+        "select_bind_address",
+        lambda: pytest.fail("--local-only should not call the selector"),
+    )
+    monkeypatch.setattr(
+        vizdiff_cli.bugshot_workflow,
+        "run_review_session",
+        lambda **kwargs: selected.append(kwargs["bind_address"]) or 0,
+    )
+
+    assert vizdiff_cli.main([
+        "--manifest", str(tmp_path / "manifest.json"),
+        "--local-only",
+        "--json",
+    ]) == 0
+    assert selected == ["127.0.0.1"]
+
+
 def test_vizdiff_head_only_skips_baseline_lookup(fake_git_worktree, fake_capture_command):
     """--head-only should classify every image as 'added' without needing a baseline."""
     import vizdiff_workflow
