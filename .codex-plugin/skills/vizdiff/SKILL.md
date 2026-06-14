@@ -58,11 +58,12 @@ Skip when:
    python3 {{vizdiff_dir}}/vizdiff_cli.py --json --manifest {{manifest_path}}
    ```
 
-4. Read the first line of the CLI's stderr — `Gallery is running at <url>`.
-   Print the URL to the user. By default, the CLI selects the bind address with
-   the same `select-bind-address` helper used by the bugshot skill. Pass
-   `--bind <addr>` or `--local-only` only when the user explicitly requests a
-   bind mode.
+4. Scan the CLI's stderr for `Gallery is running at <url>` and print that URL
+   to the user. By default, the CLI selects the bind address with the same
+   `select-bind-address` helper used by the bugshot skill; that helper writes
+   its explanatory bind-selection message to stderr before the gallery URL.
+   Pass `--bind <addr>` or `--local-only` only when the user explicitly
+   requests a bind mode.
 5. Wait for the CLI to exit; it handles polling and browser lifecycle.
 6. Parse the trailing JSON line on stdout: `{"draft_count": N, "drafts": [...]}`.
 

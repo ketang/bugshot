@@ -162,6 +162,23 @@ def test_build_generates_vizdiff_skill(tmp_path, monkeypatch):
     assert (skill_dir / "templates").is_dir()
 
 
+def test_build_copies_vizdiff_bind_selector_from_bugshot_source(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    bugshot_helper = tmp_path / "skills" / "bugshot" / "select-bind-address"
+    vizdiff_helper = tmp_path / "skills" / "vizdiff" / "select-bind-address"
+    bugshot_helper.write_text("#!/bin/sh\necho bugshot\n")
+    vizdiff_helper.write_text("#!/bin/sh\necho stale-vizdiff\n")
+
+    monkeypatch.setattr(sys, "argv", ["build-plugin"])
+    mod.main()
+
+    assert (tmp_path / "skills" / "vizdiff" / "select-bind-address").read_text() == bugshot_helper.read_text()
+    assert (
+        tmp_path / ".codex-plugin" / "skills" / "vizdiff" / "select-bind-address"
+    ).read_text() == bugshot_helper.read_text()
+
+
 def test_build_preserves_each_skill_md(tmp_path, monkeypatch):
     mod = load_build_plugin(tmp_path, monkeypatch)
     setup_source_files(tmp_path)
