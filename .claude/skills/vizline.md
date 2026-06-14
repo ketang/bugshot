@@ -87,8 +87,11 @@ the final location.
 
 ## Notes
 
-- Trigger model: vizline ships with no enforced trigger. The launching skill or
-  the agent decides when to invoke it.
+- Trigger model: the description's file-existence condition determines when
+  vizline should fire: at branch start, before rendered-output edits, when the
+  worktree ships `.agent-plugins/bento/bugshot/viz/capture-command`. No runtime
+  hook enforces invocation; if vizline is skipped or its baseline goes stale,
+  vizdiff's missing/stale baseline check is the hard enforcement backstop.
 - Default branch-start capture requires the feature worktree to be clean and
   `HEAD` to match the resolved base ref. If that is no longer true, use
   `--from-base-ref`.
