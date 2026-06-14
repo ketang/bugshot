@@ -156,6 +156,8 @@ def test_build_generates_vizdiff_skill(tmp_path, monkeypatch):
     skill_dir = tmp_path / "skills" / "vizdiff"
     for name in mod.SKILL_PLUGINS["vizdiff"]["files"]:
         assert (skill_dir / name).exists(), f"missing {name} in skills/vizdiff/"
+    for name in mod.SKILL_PLUGINS["vizdiff"]["skill_files"]:
+        assert (skill_dir / name).exists(), f"missing {name} in skills/vizdiff/"
     assert (skill_dir / "static").is_dir()
     assert (skill_dir / "templates").is_dir()
 
