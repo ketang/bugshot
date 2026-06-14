@@ -301,8 +301,8 @@ def _resolve_baseline_source(
     if not manifest_path.is_file():
         raise VizdiffError(
             f"No baseline found at {baseline_dir}.\n"
-            f"  At branch start:       bento:vizline --feature-worktree {feature_worktree}\n"
-            f"  If work already began: bento:vizline --feature-worktree {feature_worktree} --from-base-ref\n"
+            f"  At branch start:       bugshot:vizline --feature-worktree {feature_worktree}\n"
+            f"  If work already began: bugshot:vizline --feature-worktree {feature_worktree} --from-base-ref\n"
             f"  Or supply manually:    --base-dir <path-to-prebuilt-base-screenshots>\n"
             f"  Or skip diff entirely: --head-only"
         )
@@ -313,7 +313,7 @@ def _resolve_baseline_source(
         raise VizdiffError(
             f"Stale baseline at {baseline_dir}: captured at {manifest.base_sha[:8]}, "
             f"base ref {resolved!r} now resolves to {actual_sha[:8]}.\n"
-            f"  Refresh via:    bento:vizline --feature-worktree {feature_worktree} --refresh"
+            f"  Refresh via:    bugshot:vizline --feature-worktree {feature_worktree} --refresh"
         )
     images_dir = baseline_dir / "images"
     try:
@@ -321,7 +321,7 @@ def _resolve_baseline_source(
     except baseline_manifest.ManifestError as error:
         raise VizdiffError(
             f"Tampered baseline at {baseline_dir}: {error}.\n"
-            f"  Refresh via:    bento:vizline --feature-worktree {feature_worktree} --refresh"
+            f"  Refresh via:    bugshot:vizline --feature-worktree {feature_worktree} --refresh"
         ) from error
     return images_dir, resolved, actual_sha
 

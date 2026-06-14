@@ -21,9 +21,9 @@ rendered output. Vizdiff requires a baseline produced upstream by `vizline`.
 
 Skip when:
 
-- No baseline exists at `.bugshot/baseline/manifest.json` (run `bento:vizline`
+- No baseline exists at `.bugshot/baseline/manifest.json` (run `bugshot:vizline`
   first at branch start. If work has already begun, run
-  `bento:vizline --feature-worktree <path> --from-base-ref` instead. Pass
+  `bugshot:vizline --feature-worktree <path> --from-base-ref` instead. Pass
   `--head-only` only for plain HEAD capture without comparison).
 - The branch is verifiably non-rendering — backend-only changes with no UI,
   template, or design-system impact.
@@ -32,7 +32,7 @@ Skip when:
 
 - The feature worktree must be a git worktree.
 - `.agent-plugins/bento/bugshot/viz/capture-command` must exist and be executable.
-- A baseline at `.bugshot/baseline/` (created via `bento:vizline`) is required
+- A baseline at `.bugshot/baseline/` (created via `bugshot:vizline`) is required
   unless `--head-only` or `--base-dir` is passed.
 - Default vizline baselines are branch-start captures from a clean feature
   worktree. When vizdiff finds no baseline after feature edits already exist,
@@ -108,6 +108,6 @@ and it carries:
 - Re-running vizdiff overwrites `.bugshot/head/` and `.bugshot/review-root/`,
   invalidating asset paths in older drafts. Consume drafts before re-running.
 - Stale baseline (`base_sha` mismatch with current `git rev-parse <ref>`) is a
-  hard error. Fix it via `bento:vizline --feature-worktree <path> --refresh`.
+  hard error. Fix it via `bugshot:vizline --feature-worktree <path> --refresh`.
 - vizdiff holds `.bugshot/head.lock` via `fcntl.flock`. Concurrent vizdiff runs
   on the same worktree refuse with a clear message.
