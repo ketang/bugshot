@@ -73,6 +73,10 @@ def setup_source_files(tmp_path: Path) -> None:
     (tmp_path / "static" / "style.css").write_text("")
     (tmp_path / "templates").mkdir()
     (tmp_path / "templates" / "index.html").write_text("")
+    specs_dir = tmp_path / "docs" / "specs"
+    specs_dir.mkdir(parents=True)
+    (specs_dir / "review-units.md").write_text("# Review units\n")
+    (tmp_path / "INSTALL.md").write_text("# Install\n")
 
 
 def test_build_generates_manifests(tmp_path, monkeypatch):
@@ -269,3 +273,99 @@ def test_no_bump_flag_is_idempotent(tmp_path, monkeypatch):
 
     version_file = tmp_path / "plugin-version.json"
     assert json.loads(version_file.read_text())["version"] == "1.0.0"
+
+
+def test_bundle_dir_stages_slim_plugin_payload(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    for internal_path in (
+        "node_modules/typescript/package.json",
+        ".beads/issues.jsonl",
+        "docs/plans/internal-plan.md",
+        "tests/test_internal.py",
+    ):
+        path = tmp_path / internal_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("internal\n")
+    overlay = tmp_path / "skills" / "bugshot" / "overlays" / "codex.md"
+    overlay.parent.mkdir(parents=True)
+    overlay.write_text("codex overlay\n")
+    (tmp_path / "package.json").write_text("{}\n")
+
+    bundle_dir = tmp_path / "dist" / "bugshot"
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", str(bundle_dir)])
+    mod.main()
+
+    assert (bundle_dir / ".claude" / "skills" / "bugshot.md").is_file()
+    assert (bundle_dir / ".claude" / "skills" / "vizline.md").is_file()
+    assert (bundle_dir / ".claude" / "skills" / "vizdiff.md").is_file()
+    assert (bundle_dir / ".claude-plugin" / "plugin.json").is_file()
+    assert (bundle_dir / ".codex-plugin" / "plugin.json").is_file()
+    assert (bundle_dir / ".codex-plugin" / "skills" / "bugshot" / "SKILL.md").is_file()
+    assert (bundle_dir / "skills" / "bugshot" / "bugshot_cli.py").is_file()
+    assert (bundle_dir / "assets" / "icon.png").is_file()
+    assert (bundle_dir / "docs" / "specs" / "review-units.md").is_file()
+    assert (bundle_dir / "INSTALL.md").is_file()
+    assert (bundle_dir / "plugin-version.json").is_file()
+    assert (bundle_dir / mod.BUNDLE_MARKER).is_file()
+
+    assert not (bundle_dir / "node_modules").exists()
+    assert not (bundle_dir / ".beads").exists()
+    assert not (bundle_dir / "docs" / "plans").exists()
+    assert not (bundle_dir / "tests").exists()
+    assert not (bundle_dir / "package.json").exists()
+    assert not (bundle_dir / "skills" / "bugshot" / "overlays").exists()
+
+
+def test_bundle_dir_rejects_repository_root(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", "."])
+
+    with pytest.raises(SystemExit, match="repository root or ancestor"):
+        mod.main()
+
+    assert (tmp_path / "skills" / "bugshot" / "SKILL.md").is_file()
+
+
+def test_bundle_dir_rejects_path_inside_source_payload(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", "skills/nested-bundle"])
+
+    with pytest.raises(SystemExit, match="inside source payload path"):
+        mod.main()
+
+    assert not (tmp_path / "skills" / "nested-bundle").exists()
+
+
+def test_bundle_dir_rejects_non_empty_unowned_target(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    bundle_dir = tmp_path / "dist" / "bugshot"
+    bundle_dir.mkdir(parents=True)
+    unowned_file = bundle_dir / "keep.txt"
+    unowned_file.write_text("do not delete\n")
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", str(bundle_dir)])
+
+    with pytest.raises(SystemExit, match="non-empty unowned bundle target"):
+        mod.main()
+
+    assert unowned_file.read_text() == "do not delete\n"
+
+
+def test_bundle_dir_replaces_marker_owned_target(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    bundle_dir = tmp_path / "dist" / "bugshot"
+    bundle_dir.mkdir(parents=True)
+    (bundle_dir / mod.BUNDLE_MARKER).write_text("bugshot plugin bundle\n")
+    stale_file = bundle_dir / "stale.txt"
+    stale_file.write_text("replace me\n")
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", str(bundle_dir)])
+
+    mod.main()
+
+    assert not stale_file.exists()
+    assert (bundle_dir / mod.BUNDLE_MARKER).is_file()
+    assert (bundle_dir / ".claude" / "skills" / "bugshot.md").is_file()

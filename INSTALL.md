@@ -58,3 +58,17 @@ scripts/install-codex-plugin
 
 The installer replaces only the Bugshot plugin directory inside the local
 marketplace and rewrites Bugshot's marketplace entry.
+
+## Publish
+
+Use a staged bundle when publishing or registering Bugshot as a marketplace
+plugin source:
+
+```bash
+scripts/build-plugin --bundle-dir dist/bugshot
+```
+
+The staged bundle contains the generated Claude and Codex plugin payloads plus
+runtime assets and public specs. It intentionally excludes development-only
+checkout content such as `node_modules/`, `.beads/`, `docs/plans/`, and
+`tests/`.
