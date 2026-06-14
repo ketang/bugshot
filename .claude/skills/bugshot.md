@@ -65,13 +65,13 @@ session_dir="$(mktemp -d -t bugshot-session.XXXXXX)"
 {{bugshot_dir}}/bugshot_cli.py --json --bind "$bind_address" --session-dir "$session_dir" {{directory}}
 ```
 
-   The CLI blocks until the user finishes reviewing and the session ends. In
-   Claude Code the Bash tool streams stderr in real time, so the gallery URL
-   appears in the tool output while the command is still running.
+   The CLI blocks until the user finishes reviewing and the session ends. The
+   first line of the CLI's stderr is `Gallery is running at <url>`. In Claude
+   Code the Bash tool streams stderr in real time, so the gallery URL appears
+   in the tool output while the command is still running.
 
-6. The first line of the CLI's stderr is `Gallery is running at <url>`. Once
-   the tool call returns (after the user has finished reviewing), print the URL
-   in the visible conversation and tell the user what happened:
+6. While the CLI is still running, use the streamed stderr URL as the live
+   gallery URL and tell the user:
 
    > Bugshot gallery is running at `<url>`. Open that URL, review the units, type comments on any issues you see, then click "Done Reviewing".
 
@@ -81,9 +81,10 @@ session_dir="$(mktemp -d -t bugshot-session.XXXXXX)"
    requests a bind mode, honor that request instead of using the helper.
 
 7. The CLI exits on its own when the user clicks "Done Reviewing" (or when the
-   heartbeat times out). The foreground Bash call returns at that point. The
-   CLI handles all polling and browser lifecycle internally — do not poll any
-   HTTP endpoints yourself.
+   heartbeat times out). The foreground Bash call returns at that point, after
+   the gallery session has ended. Do not describe the gallery as still running
+   after the command returns. The CLI handles all polling and browser lifecycle
+   internally — do not poll any HTTP endpoints yourself.
 
 ## Process Comments
 

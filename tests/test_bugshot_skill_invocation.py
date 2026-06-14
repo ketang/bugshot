@@ -28,6 +28,17 @@ def test_bugshot_skill_forbids_rtk_gallery_invocation_prefix() -> None:
     assert "Do not prefix the gallery process invocation with `python3` or `rtk`" in codex_overlay
 
 
+def test_bugshot_skill_documents_live_url_during_blocking_cli() -> None:
+    skill = (REPO_ROOT / "skills" / "bugshot" / "SKILL.md").read_text()
+    normalized_skill = " ".join(skill.split())
+
+    assert "The first line of the CLI's stderr is `Gallery is running at <url>`" in normalized_skill
+    assert "While the CLI is still running, use the streamed stderr URL" in normalized_skill
+    assert "Once the tool call returns" not in skill
+    assert "after the user has finished reviewing), print the URL" not in skill
+    assert "Do not describe the gallery as still running after the command returns" in normalized_skill
+
+
 def test_bugshot_cli_is_executable_for_direct_skill_invocation() -> None:
     mode = (REPO_ROOT / "bugshot_cli.py").stat().st_mode
 
