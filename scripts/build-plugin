@@ -272,6 +272,7 @@ SKILL_PLUGINS = {
 }
 
 BUNDLE_PATHS = (
+    ".claude/skills",
     ".claude-plugin",
     ".codex-plugin",
     "assets",
@@ -423,10 +424,33 @@ def copy_bundle_path(relative_path: str, target_root: Path, verbose: bool = Fals
         print(f"  bundled {relative_path}")
 
 
+def path_contains(parent: Path, child: Path) -> bool:
+    try:
+        child.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def validate_bundle_dir(bundle_dir: Path) -> None:
+    root = ROOT.resolve()
+    resolved_bundle_dir = bundle_dir.resolve(strict=False)
+    if path_contains(resolved_bundle_dir, root):
+        raise SystemExit(f"refusing to write bundle over repository root or ancestor: {bundle_dir}")
+
+    for relative_path in BUNDLE_PATHS:
+        source = (ROOT / relative_path).resolve(strict=False)
+        if path_contains(resolved_bundle_dir, source):
+            raise SystemExit(f"refusing to write bundle over source payload path: {relative_path}")
+        if path_contains(source, resolved_bundle_dir):
+            raise SystemExit(f"refusing to write bundle inside source payload path: {relative_path}")
+
+
 def write_bundle(bundle_dir: Path, verbose: bool = False) -> None:
     bundle_dir = bundle_dir.expanduser()
     if not bundle_dir.is_absolute():
         bundle_dir = ROOT / bundle_dir
+    validate_bundle_dir(bundle_dir)
     remove_existing(bundle_dir)
     bundle_dir.mkdir(parents=True)
     for relative_path in BUNDLE_PATHS:

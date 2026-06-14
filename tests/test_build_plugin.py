@@ -296,6 +296,9 @@ def test_bundle_dir_stages_slim_plugin_payload(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", str(bundle_dir)])
     mod.main()
 
+    assert (bundle_dir / ".claude" / "skills" / "bugshot.md").is_file()
+    assert (bundle_dir / ".claude" / "skills" / "vizline.md").is_file()
+    assert (bundle_dir / ".claude" / "skills" / "vizdiff.md").is_file()
     assert (bundle_dir / ".claude-plugin" / "plugin.json").is_file()
     assert (bundle_dir / ".codex-plugin" / "plugin.json").is_file()
     assert (bundle_dir / ".codex-plugin" / "skills" / "bugshot" / "SKILL.md").is_file()
@@ -311,3 +314,25 @@ def test_bundle_dir_stages_slim_plugin_payload(tmp_path, monkeypatch):
     assert not (bundle_dir / "tests").exists()
     assert not (bundle_dir / "package.json").exists()
     assert not (bundle_dir / "skills" / "bugshot" / "overlays").exists()
+
+
+def test_bundle_dir_rejects_repository_root(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", "."])
+
+    with pytest.raises(SystemExit, match="repository root or ancestor"):
+        mod.main()
+
+    assert (tmp_path / "skills" / "bugshot" / "SKILL.md").is_file()
+
+
+def test_bundle_dir_rejects_path_inside_source_payload(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", "skills/nested-bundle"])
+
+    with pytest.raises(SystemExit, match="inside source payload path"):
+        mod.main()
+
+    assert not (tmp_path / "skills" / "nested-bundle").exists()
