@@ -271,13 +271,31 @@ SKILL_PLUGINS = {
     },
 }
 
+BUNDLE_PATHS = (
+    ".claude-plugin",
+    ".codex-plugin",
+    "assets",
+    "skills",
+    "docs/specs",
+    "plugin-version.json",
+    "INSTALL.md",
+)
+
+BUNDLE_IGNORED_COPY_NAMES = (
+    "__pycache__",
+    ".DS_Store",
+    ".pytest_cache",
+    "overlays",
+)
+
 USAGE = """\
-usage: build-plugin [--bump] [-h | --help] [-v | --verbose]
+usage: build-plugin [--bump] [--bundle-dir PATH] [-h | --help] [-v | --verbose]
 
 Build the Claude and Codex plugin manifests, skill directory, and assets.
 
 options:
   --bump          increment the patch version before building
+  --bundle-dir    write a slim plugin publication bundle at PATH
   -v, --verbose   print each output path as it is written
   -h, --help      show this message and exit
 """
@@ -381,6 +399,42 @@ def write_one_skill_dir(skill_name: str, spec: dict, verbose: bool = False) -> N
     write_skill_runtime(skill_name, spec, skill_dir(skill_name), verbose=verbose)
 
 
+def remove_existing(path: Path) -> None:
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+        return
+    if path.exists():
+        shutil.rmtree(path)
+
+
+def copy_bundle_path(relative_path: str, target_root: Path, verbose: bool = False) -> None:
+    source = ROOT / relative_path
+    if not source.exists():
+        raise SystemExit(f"bundle payload path is missing: {relative_path}")
+
+    target = target_root / relative_path
+    if source.is_dir():
+        ignore = shutil.ignore_patterns(*BUNDLE_IGNORED_COPY_NAMES)
+        shutil.copytree(source, target, ignore=ignore)
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    if verbose:
+        print(f"  bundled {relative_path}")
+
+
+def write_bundle(bundle_dir: Path, verbose: bool = False) -> None:
+    bundle_dir = bundle_dir.expanduser()
+    if not bundle_dir.is_absolute():
+        bundle_dir = ROOT / bundle_dir
+    remove_existing(bundle_dir)
+    bundle_dir.mkdir(parents=True)
+    for relative_path in BUNDLE_PATHS:
+        copy_bundle_path(relative_path, bundle_dir, verbose=verbose)
+    if verbose:
+        print(f"  wrote slim bundle {bundle_dir}")
+
+
 def write_claude_skill_files(verbose: bool = False) -> None:
     target_dir = ROOT / ".claude" / "skills"
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -412,6 +466,13 @@ def main() -> None:
         sys.exit(0)
     verbose = "-v" in args or "--verbose" in args
     bump = "--bump" in args
+    bundle_dir = None
+    if "--bundle-dir" in args:
+        index = args.index("--bundle-dir")
+        try:
+            bundle_dir = Path(args[index + 1])
+        except IndexError as exc:
+            raise SystemExit("--bundle-dir requires a path") from exc
     version = read_version()
     if bump:
         version = bump_version(version)
@@ -424,6 +485,8 @@ def main() -> None:
     write_claude_skill_files(verbose)
     write_codex_skill_dir(verbose)
     write_assets(verbose)
+    if bundle_dir is not None:
+        write_bundle(bundle_dir, verbose=verbose)
     print(f"Built plugin v{version}")
 
 
