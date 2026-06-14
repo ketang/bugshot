@@ -266,7 +266,7 @@ SKILL_PLUGINS = {
             "bugshot_workflow.py",
             "ansi_render.py",
         ],
-        "skill_files": [],
+        "skill_files": ["select-bind-address"],
         "trees": ["static", "templates"],
     },
 }
@@ -358,6 +358,8 @@ def write_skill_runtime(
 
     for filename in spec.get("skill_files", []):
         source = skill_dir(skill_name) / filename
+        if not source.exists() and skill_name == "vizdiff":
+            source = skill_dir("bugshot") / filename
         if not source.exists():
             raise SystemExit(f"skills/{skill_name}/{filename} is missing")
         target = target_dir / filename
