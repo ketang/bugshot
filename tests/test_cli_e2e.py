@@ -132,6 +132,9 @@ def test_cli_json_output(repo_root, workflow_screenshot_dir):
     )
     gallery_url, initial_stderr = _read_gallery_url(process, source="stderr")
 
+    assert initial_stderr.startswith("Gallery is running at ")
+    assert process.poll() is None
+
     _post_json(
         f"{gallery_url}/api/comments",
         {
