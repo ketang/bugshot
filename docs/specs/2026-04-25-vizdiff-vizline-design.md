@@ -4,8 +4,8 @@
 
 Two new skills in the bugshot plugin family for visual change review:
 
-- **`bento:vizline`** — captures a *baseline* set of screenshots at a base ref and stores it inside a feature worktree.
-- **`bento:vizdiff`** — captures HEAD screenshots, compares against the baseline, and opens a diff-aware gallery for human review. Comments (with optional spatial regions) flow out as issue drafts in the same shape bugshot already uses.
+- **`bugshot:vizline`** — captures a *baseline* set of screenshots at a base ref and stores it inside a feature worktree.
+- **`bugshot:vizdiff`** — captures HEAD screenshots, compares against the baseline, and opens a diff-aware gallery for human review. Comments (with optional spatial regions) flow out as issue drafts in the same shape bugshot already uses.
 
 The existing `bento:bugshot` skill is unchanged in purpose, but its draft schema and SQLite comments table gain a nullable `region` field shared with vizdiff.
 
@@ -139,7 +139,7 @@ Locates the worktree-placement convention the target project wants vizline to us
 - **Exit 0** required for the path to be honored.
 - **Absent file** = vizline falls back to `tempfile.mkdtemp(prefix="bugshot-baseline-")`. This is safe because the worktree is ephemeral and skill-owned (created → captured → removed within one invocation); the prohibition on placing user-facing feature worktrees in `/tmp` does not apply here.
 
-## Skill: `bento:vizline`
+## Skill: `bugshot:vizline`
 
 ### CLI surface
 
@@ -188,7 +188,7 @@ The `should-baseline` script is the project's own per-task gate; it complements 
 
 The bugshot SKILL.md explicitly documents this so launching-skill authors and agents both know they own the trigger.
 
-## Skill: `bento:vizdiff`
+## Skill: `bugshot:vizdiff`
 
 ### CLI surface
 
@@ -215,8 +215,8 @@ Vizdiff intentionally does **not** support `--refresh-baseline` or `--no-baselin
 
      ```
      No baseline found at .bugshot/baseline/ (or stale: captured at <old-sha>, base now <new-sha>).
-      Create one at branch start via: bento:vizline --feature-worktree <path>
-      If work already began:          bento:vizline --feature-worktree <path> --from-base-ref
+      Create one at branch start via: bugshot:vizline --feature-worktree <path>
+      If work already began:          bugshot:vizline --feature-worktree <path> --from-base-ref
       Or supply manually:    --base-dir <path-to-prebuilt-base-screenshots>
       Or skip diff entirely: --head-only
      ```
