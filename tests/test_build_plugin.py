@@ -307,6 +307,7 @@ def test_bundle_dir_stages_slim_plugin_payload(tmp_path, monkeypatch):
     assert (bundle_dir / "docs" / "specs" / "review-units.md").is_file()
     assert (bundle_dir / "INSTALL.md").is_file()
     assert (bundle_dir / "plugin-version.json").is_file()
+    assert (bundle_dir / mod.BUNDLE_MARKER).is_file()
 
     assert not (bundle_dir / "node_modules").exists()
     assert not (bundle_dir / ".beads").exists()
@@ -336,3 +337,35 @@ def test_bundle_dir_rejects_path_inside_source_payload(tmp_path, monkeypatch):
         mod.main()
 
     assert not (tmp_path / "skills" / "nested-bundle").exists()
+
+
+def test_bundle_dir_rejects_non_empty_unowned_target(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    bundle_dir = tmp_path / "dist" / "bugshot"
+    bundle_dir.mkdir(parents=True)
+    unowned_file = bundle_dir / "keep.txt"
+    unowned_file.write_text("do not delete\n")
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", str(bundle_dir)])
+
+    with pytest.raises(SystemExit, match="non-empty unowned bundle target"):
+        mod.main()
+
+    assert unowned_file.read_text() == "do not delete\n"
+
+
+def test_bundle_dir_replaces_marker_owned_target(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    bundle_dir = tmp_path / "dist" / "bugshot"
+    bundle_dir.mkdir(parents=True)
+    (bundle_dir / mod.BUNDLE_MARKER).write_text("bugshot plugin bundle\n")
+    stale_file = bundle_dir / "stale.txt"
+    stale_file.write_text("replace me\n")
+    monkeypatch.setattr(sys, "argv", ["build-plugin", "--bundle-dir", str(bundle_dir)])
+
+    mod.main()
+
+    assert not stale_file.exists()
+    assert (bundle_dir / mod.BUNDLE_MARKER).is_file()
+    assert (bundle_dir / ".claude" / "skills" / "bugshot.md").is_file()

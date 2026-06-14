@@ -288,6 +288,7 @@ BUNDLE_IGNORED_COPY_NAMES = (
     ".pytest_cache",
     "overlays",
 )
+BUNDLE_MARKER = ".bugshot-plugin-bundle"
 
 USAGE = """\
 usage: build-plugin [--bump] [--bundle-dir PATH] [-h | --help] [-v | --verbose]
@@ -446,15 +447,29 @@ def validate_bundle_dir(bundle_dir: Path) -> None:
             raise SystemExit(f"refusing to write bundle inside source payload path: {relative_path}")
 
 
+def ensure_owned_bundle_target(bundle_dir: Path) -> None:
+    if not bundle_dir.exists():
+        return
+    if bundle_dir.is_symlink() or not bundle_dir.is_dir():
+        raise SystemExit(f"refusing to replace non-directory bundle target without marker: {bundle_dir}")
+    if not any(bundle_dir.iterdir()):
+        return
+    marker = bundle_dir / BUNDLE_MARKER
+    if not marker.is_file():
+        raise SystemExit(f"refusing to replace non-empty unowned bundle target: {bundle_dir}")
+
+
 def write_bundle(bundle_dir: Path, verbose: bool = False) -> None:
     bundle_dir = bundle_dir.expanduser()
     if not bundle_dir.is_absolute():
         bundle_dir = ROOT / bundle_dir
     validate_bundle_dir(bundle_dir)
+    ensure_owned_bundle_target(bundle_dir)
     remove_existing(bundle_dir)
     bundle_dir.mkdir(parents=True)
     for relative_path in BUNDLE_PATHS:
         copy_bundle_path(relative_path, bundle_dir, verbose=verbose)
+    (bundle_dir / BUNDLE_MARKER).write_text("bugshot plugin bundle\n")
     if verbose:
         print(f"  wrote slim bundle {bundle_dir}")
 
