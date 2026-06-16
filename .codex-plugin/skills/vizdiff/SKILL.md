@@ -4,7 +4,7 @@ description: TRIGGER at handoff or before landing when `.bugshot/baseline/manife
 arguments:
   - name: feature_worktree
     description: Path to the feature worktree to diff
-    required: true
+    required: false
 ---
 
 # Vizdiff — Bugshot Visual Diff Skill
@@ -44,7 +44,9 @@ Skip when:
 
 ## Startup
 
-1. Validate `{{feature_worktree}}` is a git worktree.
+1. In the default (non-manifest) mode, validate `{{feature_worktree}}` is a git
+   worktree. Skip this step in manifest mode, which takes a manifest path
+   instead of a feature worktree.
 2. Find the vizdiff installation directory.
 3. Run the CLI with `--json`:
 
@@ -69,7 +71,6 @@ Skip when:
 
 ## CLI flags
 
-- positional `feature_worktree` — required.
 - positional `feature_worktree` — required unless `--manifest` is supplied.
 - `--manifest <path>` — consume a non-interactive vizdiff manifest and open the
   prebuilt review in the gallery.
