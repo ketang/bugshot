@@ -3,7 +3,7 @@ name: vizdiff
 description: TRIGGER at handoff or before landing when `.bugshot/baseline/manifest.json` exists in the worktree. Captures HEAD, diffs against vizline's baseline, opens a review gallery, emits issue drafts. Run vizline first if no baseline exists.
 arguments:
   - name: feature_worktree
-    description: Path to the feature worktree to diff
+    description: Path to the feature worktree to diff in default mode; omit when using --manifest
     required: false
 ---
 
@@ -30,10 +30,14 @@ Skip when:
 
 ## Prerequisites
 
-- The feature worktree must be a git worktree.
-- `.agent-plugins/bento/bugshot/viz/capture-command` must exist and be executable.
-- A baseline at `.bugshot/baseline/` (created via `bugshot:vizline`) is required
-  unless `--head-only` or `--base-dir` is passed.
+- In default (non-manifest) mode, `feature_worktree` is required and must be a
+  git worktree.
+- In default (non-manifest) mode,
+  `.agent-plugins/bento/bugshot/viz/capture-command` must exist and be
+  executable.
+- In default (non-manifest) mode, a baseline at `.bugshot/baseline/` (created
+  via `bugshot:vizline`) is required unless `--head-only` or `--base-dir` is
+  passed.
 - Default vizline baselines are branch-start captures from a clean feature
   worktree. When vizdiff finds no baseline after feature edits already exist,
   create one with vizline's explicit `--from-base-ref` mode so the baseline
@@ -44,9 +48,9 @@ Skip when:
 
 ## Startup
 
-1. In the default (non-manifest) mode, validate `{{feature_worktree}}` is a git
-   worktree. Skip this step in manifest mode, which takes a manifest path
-   instead of a feature worktree.
+1. Choose invocation mode. If `--manifest {{manifest_path}}` is supplied, do
+   not require or validate `{{feature_worktree}}`. Otherwise, require
+   `{{feature_worktree}}` and validate it is a git worktree.
 2. Find the vizdiff installation directory.
 3. Run the CLI with `--json`:
 
