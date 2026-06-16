@@ -23,7 +23,7 @@ function makeDetailPayload() {
   };
 }
 
-async function loadDetailGallery() {
+async function loadDetailGallery(fetchImpl = vi.fn(() => Promise.reject(new Error("offline")))) {
   vi.resetModules();
   document.body.innerHTML = [
     '<div id="detail-theme-controls"></div>',
@@ -43,11 +43,15 @@ async function loadDetailGallery() {
     '</form>',
     '<button id="detail-done-btn"></button>',
   ].join("\n");
-  vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("offline"))));
+  vi.stubGlobal("fetch", fetchImpl);
   window.__BUGSHOT_ENABLE_TEST_HOOKS__ = true;
   window.__BUGSHOT_DETAIL__ = makeDetailPayload() as any;
   await import("../../static/gallery.ts");
   return window.__BUGSHOT_TEST__!;
+}
+
+async function flushPromises() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe("detail page fullsize toggle", () => {
@@ -82,5 +86,51 @@ describe("detail page fullsize toggle", () => {
     btn.click();
     expect(assets.classList.contains("detail-fullsize-mode")).toBe(false);
     expect(btn.textContent).toBe("Full Size");
+  });
+
+  it("marks the current detail unit seen when the page loads", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(new Response("{}", { status: 200 })));
+
+    await loadDetailGallery(fetchMock);
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/review-state",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ unit_id: "unit-1", seen: true }),
+      }),
+    );
+  });
+
+  it("waits for the current seen update before marking the session done", async () => {
+    let resolveSeen: (value: Response) => void = () => {};
+    const fetchMock = vi.fn((url) => {
+      if (url === "/api/review-state") {
+        return new Promise<Response>((resolve) => {
+          resolveSeen = resolve;
+        });
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+    vi.stubGlobal("confirm", vi.fn(() => true));
+
+    await loadDetailGallery(fetchMock);
+    (document.getElementById("detail-done-btn") as HTMLButtonElement).click();
+    await flushPromises();
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/done",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    resolveSeen(new Response("{}", { status: 200 }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/done",
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });
