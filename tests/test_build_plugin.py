@@ -51,6 +51,8 @@ SHARED_SKILL_PYTHON_FILES = [
     "vizdiff_cli.py",
     "vizdiff_workflow.py",
     "vizdiff_review_root.py",
+    "wire_bugshot_cli.py",
+    "wire_bugshot_workflow.py",
     "baseline_manifest.py",
     "capture_runner.py",
     "image_diff.py",
@@ -59,7 +61,7 @@ SHARED_SKILL_PYTHON_FILES = [
 
 def setup_source_files(tmp_path: Path) -> None:
     """Create minimal source files that build-plugin reads or preserves."""
-    for skill_name in ("bugshot", "vizline", "vizdiff"):
+    for skill_name in ("bugshot", "vizline", "vizdiff", "wire-bugshot"):
         skill_dir = tmp_path / "skills" / skill_name
         skill_dir.mkdir(parents=True)
         (skill_dir / "SKILL.md").write_text(f"---\nname: {skill_name}\n---\n")
@@ -164,6 +166,20 @@ def test_build_generates_vizdiff_skill(tmp_path, monkeypatch):
         assert (skill_dir / name).exists(), f"missing {name} in skills/vizdiff/"
     assert (skill_dir / "static").is_dir()
     assert (skill_dir / "templates").is_dir()
+
+
+def test_build_generates_wire_bugshot_skill(tmp_path, monkeypatch):
+    mod = load_build_plugin(tmp_path, monkeypatch)
+    setup_source_files(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["build-plugin"])
+    mod.main()
+
+    skill_dir = tmp_path / "skills" / "wire-bugshot"
+    for name in mod.SKILL_PLUGINS["wire-bugshot"]["files"]:
+        assert (skill_dir / name).exists(), f"missing {name} in skills/wire-bugshot/"
+    assert not (skill_dir / "static").exists()
+    assert (tmp_path / ".codex-plugin" / "skills" / "wire-bugshot" / "SKILL.md").is_file()
+    assert (tmp_path / ".claude" / "skills" / "wire-bugshot.md").is_file()
 
 
 def test_build_copies_vizdiff_bind_selector_from_bugshot_source(tmp_path, monkeypatch):
@@ -299,10 +315,13 @@ def test_bundle_dir_stages_slim_plugin_payload(tmp_path, monkeypatch):
     assert (bundle_dir / ".claude" / "skills" / "bugshot.md").is_file()
     assert (bundle_dir / ".claude" / "skills" / "vizline.md").is_file()
     assert (bundle_dir / ".claude" / "skills" / "vizdiff.md").is_file()
+    assert (bundle_dir / ".claude" / "skills" / "wire-bugshot.md").is_file()
     assert (bundle_dir / ".claude-plugin" / "plugin.json").is_file()
     assert (bundle_dir / ".codex-plugin" / "plugin.json").is_file()
     assert (bundle_dir / ".codex-plugin" / "skills" / "bugshot" / "SKILL.md").is_file()
+    assert (bundle_dir / ".codex-plugin" / "skills" / "wire-bugshot" / "SKILL.md").is_file()
     assert (bundle_dir / "skills" / "bugshot" / "bugshot_cli.py").is_file()
+    assert (bundle_dir / "skills" / "wire-bugshot" / "wire_bugshot_cli.py").is_file()
     assert (bundle_dir / "assets" / "icon.png").is_file()
     assert (bundle_dir / "docs" / "specs" / "review-units.md").is_file()
     assert (bundle_dir / "INSTALL.md").is_file()

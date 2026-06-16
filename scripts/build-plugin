@@ -269,6 +269,16 @@ SKILL_PLUGINS = {
         "skill_files": ["select-bind-address"],
         "trees": ["static", "templates"],
     },
+    "wire-bugshot": {
+        "files": [
+            "wire_bugshot_cli.py",
+            "wire_bugshot_workflow.py",
+            "baseline_manifest.py",
+            "image_diff.py",
+        ],
+        "skill_files": [],
+        "trees": [],
+    },
 }
 
 BUNDLE_PATHS = (
