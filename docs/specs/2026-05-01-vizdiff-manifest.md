@@ -23,6 +23,12 @@ require a live automation process.
 5. The reviewer comments in the gallery and clicks "Done Reviewing".
 6. The caller or reviewer routes the emitted drafts through their normal issue
    or review channel.
+7. Vizdiff writes a review-completion manifest. A downstream gate can verify
+   human coverage with:
+
+```bash
+python3 vizdiff_cli.py --check-review-manifest /path/to/review-manifest.json
+```
 
 ## Manifest Shape
 
@@ -105,3 +111,62 @@ The existing interactive vizdiff flow is unchanged. Running `vizdiff_cli.py`
 with a feature worktree still captures HEAD, compares it with the baseline, and
 opens the generated review root. `--manifest` is a separate input mode for
 callers that already produced review artifacts.
+
+## Review-Completion Manifest
+
+Vizdiff writes a separate review-completion manifest after the Bugshot gallery
+session ends. This file records whether each generated review unit was seen and
+whether it received at least one comment.
+
+Default locations:
+
+- normal feature-worktree mode: `<feature_worktree>/.bugshot/review-manifest.json`
+- `--manifest <path>` mode: `review-manifest.json` beside the input manifest
+
+The manifest is written for explicit Done, browser close (`/api/closed`), and
+timeout completion. Early or partial review still produces the file, but the
+checker fails conservatively when any expected unit is missing or has
+`seen: false`.
+
+Example:
+
+```json
+{
+  "schema": "bugshot.vizdiff-review/v1",
+  "completed_at": "2026-06-16T02:00:00+00:00",
+  "done_reason": "closed",
+  "review_root": "/repo/.bugshot/review-root",
+  "unit_count": 2,
+  "expected_units": [
+    {"id": "pages__login.png", "label": "pages/login.png"},
+    {"id": "pages__settings.png", "label": "pages/settings.png"}
+  ],
+  "units": [
+    {
+      "id": "pages__login.png",
+      "label": "pages/login.png",
+      "seen": true,
+      "seen_at": "2026-06-16 02:00:00",
+      "commented": true
+    },
+    {
+      "id": "pages__settings.png",
+      "label": "pages/settings.png",
+      "seen": false,
+      "seen_at": null,
+      "commented": false
+    }
+  ]
+}
+```
+
+Completeness is defined only by expected-unit coverage and `seen`:
+
+- the manifest file must exist and use schema `bugshot.vizdiff-review/v1`
+- `unit_count` must match the number of `expected_units`
+- every expected unit id must have exactly one matching entry in `units`
+- every matching entry must have `seen: true`
+
+`commented` is informational. It is recorded so reviewers and downstream tools
+can tell which screens produced issue drafts, but it is not required for the
+completion marker.

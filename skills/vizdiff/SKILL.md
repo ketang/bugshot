@@ -72,6 +72,15 @@ Skip when:
    requests a bind mode.
 5. Wait for the CLI to exit; it handles polling and browser lifecycle.
 6. Parse the trailing JSON line on stdout: `{"draft_count": N, "drafts": [...]}`.
+7. Treat the review-completion manifest as the machine-checkable proof that the
+   visual diff was actually reviewed:
+
+   ```bash
+   python3 {{vizdiff_dir}}/vizdiff_cli.py --check-review-manifest {{feature_worktree}}/.bugshot/review-manifest.json
+   ```
+
+   For `--manifest {{manifest_path}}` mode, the review-completion manifest is
+   written as `review-manifest.json` beside `{{manifest_path}}`.
 
 ## CLI flags
 
@@ -85,6 +94,26 @@ Skip when:
 - `--bind <addr>` — explicit bind-address override.
 - `--local-only` — explicit loopback-only override.
 - `--json` — JSON drafts on stdout instead of markdown.
+- `--check-review-manifest <path>` — validate a vizdiff review-completion
+  manifest and exit 0 only when every expected review unit has a matching
+  `seen: true` entry. This mode does not require `feature_worktree`.
+
+## Review-completion manifest
+
+Vizdiff writes `review-manifest.json` after the Bugshot gallery session ends.
+The file is written for explicit Done, browser close, and timeout completion.
+Browser-close or partial review still produces the file, but the checker fails
+conservatively when any expected unit is missing or not seen.
+
+Completeness is:
+
+- manifest exists and uses schema `bugshot.vizdiff-review/v1`
+- `unit_count` matches the number of `expected_units`
+- every expected unit id has exactly one entry in `units`
+- every entry for an expected unit has `seen: true`
+
+`commented` is informational only. It records whether a unit produced at least
+one Bugshot comment, but it is not required for the completion marker.
 
 ## Process drafts
 
@@ -111,7 +140,9 @@ and it carries:
 ## Sharp edges
 
 - Re-running vizdiff overwrites `.bugshot/head/` and `.bugshot/review-root/`,
-  invalidating asset paths in older drafts. Consume drafts before re-running.
+  invalidating asset paths in older drafts and replacing
+  `.bugshot/review-manifest.json`. Consume drafts and check the manifest before
+  re-running.
 - Stale baseline (`base_sha` mismatch with current `git rev-parse <ref>`) is a
   hard error. Fix it via `bugshot:vizline --feature-worktree <path> --refresh`.
 - vizdiff holds `.bugshot/head.lock` via `fcntl.flock`. Concurrent vizdiff runs

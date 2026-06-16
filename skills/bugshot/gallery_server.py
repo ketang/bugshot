@@ -787,6 +787,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
 
         if path == "/api/comments":
             self._handle_comment_create()
+        elif path == "/api/review-state":
+            self._handle_review_state()
         elif path == "/api/heartbeat":
             self._handle_heartbeat()
         elif path == "/api/done":
@@ -992,6 +994,31 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         item["region"] = json.loads(item["region"]) if item["region"] else None
         self._send_json(item)
 
+    def _handle_review_state(self):
+        data = self._read_json_body()
+        unit_id = data.get("unit_id") or data.get("unit") or data.get("image")
+        seen = data.get("seen")
+        if not unit_id:
+            self._send_json({"error": "unit_id is required"}, status=400)
+            return
+        if unit_id not in self.units_by_id:
+            self._send_json({"error": f"unknown unit_id: {unit_id}"}, status=400)
+            return
+        if not isinstance(seen, bool):
+            self._send_json({"error": "seen must be a boolean"}, status=400)
+            return
+
+        conn = sqlite3.connect(self.db_path)
+        if seen:
+            conn.execute(
+                "UPDATE review_units SET seen = 1, "
+                "seen_at = COALESCE(seen_at, datetime('now')) WHERE unit_id = ?",
+                (unit_id,),
+            )
+        conn.commit()
+        conn.close()
+        self._send_json({"ok": True})
+
     def _handle_comment_update(self, comment_id):
         data = self._read_json_body()
         body = data.get("body")
@@ -1102,7 +1129,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         return json.loads(raw)
 
 
-def init_db(db_path):
+def init_db(db_path, units=None):
     """Initialize the SQLite database."""
     conn = sqlite3.connect(db_path)
     conn.execute(
@@ -1124,11 +1151,26 @@ def init_db(db_path):
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS review_units (
+            unit_id TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            seen INTEGER NOT NULL DEFAULT 0,
+            seen_at TEXT
+        )
+        """
+    )
     conn.execute("INSERT OR REPLACE INTO session VALUES ('done', 'false')")
     conn.execute("INSERT OR REPLACE INTO session VALUES ('done_reason', '')")
     conn.execute(
         "INSERT OR REPLACE INTO session VALUES ('last_heartbeat', datetime('now'))"
     )
+    if units is not None:
+        conn.executemany(
+            "INSERT OR IGNORE INTO review_units (unit_id, label) VALUES (?, ?)",
+            [(unit["id"], unit["label"]) for unit in units],
+        )
     conn.commit()
     conn.close()
 
@@ -1181,7 +1223,7 @@ def create_server(screenshot_dir, bind_address="0.0.0.0", session_dir=None):
     )
     os.close(db_fd)
     review_root_sidecar_path = _write_review_root_sidecar(db_path, directory)
-    init_db(db_path)
+    init_db(db_path, units)
 
     handler_cls = type(
         "BoundGalleryHandler",

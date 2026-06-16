@@ -207,6 +207,54 @@ def test_vizdiff_cli_preserves_local_only_override(tmp_path, monkeypatch):
     assert selected == ["127.0.0.1"]
 
 
+def test_vizdiff_cli_checks_review_manifest_without_feature_worktree(tmp_path):
+    import vizdiff_cli
+
+    passing_manifest = tmp_path / "passing-review-manifest.json"
+    passing_manifest.write_text(
+        json.dumps(
+            {
+                "schema": "bugshot.vizdiff-review/v1",
+                "unit_count": 1,
+                "expected_units": [{"id": "login.png", "label": "login.png"}],
+                "units": [
+                    {
+                        "id": "login.png",
+                        "label": "login.png",
+                        "seen": True,
+                        "commented": False,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    failing_manifest = tmp_path / "failing-review-manifest.json"
+    failing_manifest.write_text(
+        json.dumps(
+            {
+                "schema": "bugshot.vizdiff-review/v1",
+                "unit_count": 1,
+                "expected_units": [{"id": "login.png", "label": "login.png"}],
+                "units": [
+                    {
+                        "id": "login.png",
+                        "label": "login.png",
+                        "seen": False,
+                        "commented": False,
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert vizdiff_cli.main(["--check-review-manifest", str(passing_manifest)]) == 0
+    assert vizdiff_cli.main(["--check-review-manifest", str(failing_manifest)]) == 1
+
+
 def test_vizdiff_head_only_skips_baseline_lookup(fake_git_worktree, fake_capture_command):
     """--head-only should classify every image as 'added' without needing a baseline."""
     import vizdiff_workflow
