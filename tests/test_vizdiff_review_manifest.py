@@ -124,3 +124,26 @@ def test_review_manifest_check_fails_when_expected_unit_entry_is_missing(tmp_pat
 
     assert not ok
     assert any("missing review entries" in error for error in errors)
+
+
+def test_review_manifest_check_fails_empty_expected_units(tmp_path: Path):
+    import vizdiff_workflow
+
+    manifest_path = tmp_path / "review-manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "schema": REVIEW_SCHEMA,
+                "unit_count": 0,
+                "expected_units": [],
+                "units": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    ok, errors = vizdiff_workflow.check_review_manifest(manifest_path)
+
+    assert not ok
+    assert any("expected_units must be non-empty" in error for error in errors)

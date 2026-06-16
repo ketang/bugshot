@@ -19,6 +19,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("feature_worktree", type=Path, nargs="?")
     parser.add_argument("--manifest", type=Path,
                         help="Open a prebuilt non-interactive vizdiff manifest")
+    parser.add_argument("--check-review-manifest", type=Path,
+                        help="Exit 0 only when a vizdiff review manifest is complete")
     parser.add_argument("--base", default=None,
                         help="Base ref name (used for the no-baseline error message)")
     parser.add_argument("--base-dir", default=None, type=Path,
@@ -65,6 +67,12 @@ def resolve_bind_address(args: argparse.Namespace) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
+    if args.check_review_manifest is not None:
+        ok, errors = vizdiff_workflow.check_review_manifest(args.check_review_manifest)
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 0 if ok else 1
+
     bind_address = resolve_bind_address(args)
     if args.manifest is None and args.feature_worktree is None:
         print("feature_worktree is required unless --manifest is supplied", file=sys.stderr)
@@ -72,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.manifest is not None:
             review_root = vizdiff_workflow.build_review_root_from_manifest(args.manifest)
+            review_manifest_path = vizdiff_workflow.default_review_manifest_path(
+                input_manifest=args.manifest
+            )
         else:
             review_root = vizdiff_workflow.build_review_root(
                 feature_worktree=args.feature_worktree,
@@ -79,17 +90,38 @@ def main(argv: list[str] | None = None) -> int:
                 base_dir=args.base_dir,
                 head_only=args.head_only,
             )
+            review_manifest_path = vizdiff_workflow.default_review_manifest_path(
+                feature_worktree=args.feature_worktree
+            )
     except vizdiff_workflow.VizdiffError as error:
         print(str(error), file=sys.stderr)
         return 1
 
     io = bugshot_workflow.ShellIO(json_output=args.json)
-    return bugshot_workflow.run_review_session(
-        screenshot_dir=str(review_root),
-        io=io,
-        bind_address=bind_address,
-        json_output=args.json,
-    )
+    def on_session_complete(server, done_reason):
+        try:
+            written_path = vizdiff_workflow.write_review_manifest(
+                review_manifest_path,
+                server,
+                done_reason=done_reason,
+            )
+        except OSError as error:
+            raise vizdiff_workflow.VizdiffError(
+                f"Failed to write vizdiff review manifest: {error}"
+            ) from error
+        io.write(f"Vizdiff review manifest written to {written_path}")
+
+    try:
+        return bugshot_workflow.run_review_session(
+            screenshot_dir=str(review_root),
+            io=io,
+            bind_address=bind_address,
+            json_output=args.json,
+            on_session_complete=on_session_complete,
+        )
+    except vizdiff_workflow.VizdiffError as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

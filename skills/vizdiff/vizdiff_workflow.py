@@ -6,7 +6,9 @@ import fcntl
 import json
 import os
 import shutil
+import sqlite3
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -24,6 +26,170 @@ class VizdiffError(Exception):
 
 
 MANIFEST_SCHEMA = "bugshot.vizdiff-manifest/v1"
+REVIEW_MANIFEST_SCHEMA = "bugshot.vizdiff-review/v1"
+REVIEW_MANIFEST_FILENAME = "review-manifest.json"
+
+
+def default_review_manifest_path(
+    *,
+    feature_worktree: Path | None = None,
+    input_manifest: Path | None = None,
+) -> Path:
+    if feature_worktree is not None:
+        return Path(feature_worktree).resolve() / ".bugshot" / REVIEW_MANIFEST_FILENAME
+    if input_manifest is not None:
+        return Path(input_manifest).resolve().parent / REVIEW_MANIFEST_FILENAME
+    raise VizdiffError("feature_worktree or input_manifest is required")
+
+
+def write_review_manifest(
+    manifest_path: Path,
+    server,
+    *,
+    done_reason: str | None,
+) -> Path:
+    manifest_path = Path(manifest_path).resolve()
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    expected_units = [
+        {"id": unit["id"], "label": unit["label"]}
+        for unit in server.units
+    ]
+    payload = {
+        "schema": REVIEW_MANIFEST_SCHEMA,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "done_reason": done_reason or "",
+        "review_root": os.path.abspath(server.screenshot_dir),
+        "unit_count": len(expected_units),
+        "expected_units": expected_units,
+        "units": _review_manifest_unit_entries(server.db_path, server.units),
+    }
+    manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return manifest_path
+
+
+def check_review_manifest(manifest_path: Path) -> tuple[bool, list[str]]:
+    manifest_path = Path(manifest_path)
+    if not manifest_path.is_file():
+        return False, [f"review manifest does not exist: {manifest_path}"]
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return False, [f"invalid review manifest {manifest_path}: {error}"]
+
+    errors = _review_manifest_errors(manifest)
+    return not errors, errors
+
+
+def _review_manifest_unit_entries(db_path: str, units: list[dict]) -> list[dict]:
+    conn = sqlite3.connect(db_path)
+    try:
+        seen_rows = {
+            unit_id: {"seen": bool(seen), "seen_at": seen_at}
+            for unit_id, seen, seen_at in conn.execute(
+                "SELECT unit_id, seen, seen_at FROM review_units"
+            ).fetchall()
+        }
+        comment_counts = {
+            unit_id: count
+            for unit_id, count in conn.execute(
+                "SELECT unit_id, COUNT(*) FROM comments GROUP BY unit_id"
+            ).fetchall()
+        }
+    finally:
+        conn.close()
+
+    entries = []
+    for unit in units:
+        unit_id = unit["id"]
+        seen_state = seen_rows.get(unit_id, {"seen": False, "seen_at": None})
+        entries.append(
+            {
+                "id": unit_id,
+                "label": unit["label"],
+                "seen": seen_state["seen"],
+                "seen_at": seen_state["seen_at"],
+                "commented": comment_counts.get(unit_id, 0) > 0,
+            }
+        )
+    return entries
+
+
+def _review_manifest_errors(manifest: object) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(manifest, dict):
+        return ["review manifest root must be an object"]
+
+    if manifest.get("schema") != REVIEW_MANIFEST_SCHEMA:
+        errors.append(f"unsupported review manifest schema: {manifest.get('schema')}")
+
+    unit_count = manifest.get("unit_count")
+    if not isinstance(unit_count, int) or isinstance(unit_count, bool) or unit_count < 0:
+        errors.append("unit_count must be a non-negative integer")
+
+    expected_units = manifest.get("expected_units")
+    review_units = manifest.get("units")
+    expected_ids = _manifest_unit_ids(expected_units, "expected_units", errors)
+    review_ids = _manifest_unit_ids(review_units, "units", errors)
+    if isinstance(expected_units, list) and not expected_ids:
+        errors.append("expected_units must be non-empty")
+
+    if isinstance(unit_count, int) and not isinstance(unit_count, bool):
+        if unit_count != len(expected_ids):
+            errors.append(
+                f"unit_count {unit_count} does not match expected_units "
+                f"{len(expected_ids)}"
+            )
+
+    expected_set = set(expected_ids)
+    review_set = set(review_ids)
+    missing = sorted(expected_set - review_set)
+    extra = sorted(review_set - expected_set)
+    if missing:
+        errors.append(f"missing review entries: {', '.join(missing)}")
+    if extra:
+        errors.append(f"unexpected review entries: {', '.join(extra)}")
+
+    if isinstance(review_units, list):
+        entries_by_id = {
+            item.get("id"): item
+            for item in review_units
+            if isinstance(item, dict) and isinstance(item.get("id"), str)
+        }
+        for unit_id in expected_ids:
+            entry = entries_by_id.get(unit_id)
+            if entry is None:
+                continue
+            if entry.get("seen") is not True:
+                errors.append(f"unit not seen: {unit_id}")
+            commented = entry.get("commented")
+            if commented is not None and not isinstance(commented, bool):
+                errors.append(f"commented must be boolean for unit: {unit_id}")
+
+    return errors
+
+
+def _manifest_unit_ids(value: object, field_name: str, errors: list[str]) -> list[str]:
+    if not isinstance(value, list):
+        errors.append(f"{field_name} must be a list")
+        return []
+
+    ids: list[str] = []
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            errors.append(f"{field_name}[{index}] must be an object")
+            continue
+        unit_id = item.get("id")
+        if not isinstance(unit_id, str) or not unit_id:
+            errors.append(f"{field_name}[{index}].id must be a non-empty string")
+            continue
+        if unit_id in seen:
+            errors.append(f"duplicate {field_name} id: {unit_id}")
+            continue
+        seen.add(unit_id)
+        ids.append(unit_id)
+    return ids
 
 
 def build_review_root(
@@ -349,13 +515,21 @@ def run_in_process(
 
     server = gallery_server.create_server(str(review_root), bind_address=bind_address)
     try:
+        completion_reason = None
         if on_server_ready is not None:
             thread = threading.Thread(target=on_server_ready, args=(server,))
             thread.start()
             thread.join(timeout=20)
+            _done, completion_reason = bugshot_workflow._read_session_state(
+                server.db_path
+            )
         else:
             from bugshot_workflow import _wait_for_completion, ShellIO
-            _wait_for_completion(server.db_path, ShellIO(json_output=True), 0.2)
+            completion_reason = _wait_for_completion(
+                server.db_path,
+                ShellIO(json_output=True),
+                0.2,
+            )
 
         comments = bugshot_workflow._fetch_comments(server.db_path)
         from bugshot_workflow import _process_comments, ShellIO
@@ -365,6 +539,11 @@ def run_in_process(
             os.path.abspath(str(review_root)),
             ShellIO(json_output=True),
             json_output=True,
+        )
+        write_review_manifest(
+            default_review_manifest_path(feature_worktree=feature_worktree),
+            server,
+            done_reason=completion_reason,
         )
         # Pair each draft with its source comment so we know the unit_id
         # even when bugshot collapsed it into the legacy single-asset shape.

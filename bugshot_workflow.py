@@ -12,6 +12,7 @@ import tempfile
 import time
 import webbrowser
 from dataclasses import dataclass
+from typing import Callable
 
 import gallery_server
 
@@ -80,6 +81,7 @@ def run_review_session(
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS,
     json_output: bool = False,
     session_dir: str | None = None,
+    on_session_complete: Callable[[gallery_server.GalleryServer, str | None], None] | None = None,
 ) -> int:
     try:
         server = gallery_server.create_server(
@@ -101,7 +103,7 @@ def run_review_session(
             "you see, then click \"Done Reviewing\" when finished."
         )
 
-        _wait_for_completion(server.db_path, io, poll_interval_seconds)
+        completion_reason = _wait_for_completion(server.db_path, io, poll_interval_seconds)
         comments = _fetch_comments(server.db_path)
         summary = _process_comments(
             comments,
@@ -114,6 +116,8 @@ def run_review_session(
             "draft_count": summary.draft_count,
             "drafts": summary.drafts,
         }
+        if on_session_complete is not None:
+            on_session_complete(server, completion_reason)
         draft_output_path = _write_draft_json_file(payload)
         io.write(f"Bugshot session complete. Produced {summary.draft_count} issue drafts.")
         io.write(f"Bugshot issue draft JSON written to {draft_output_path}")

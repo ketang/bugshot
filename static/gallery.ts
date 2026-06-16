@@ -246,6 +246,7 @@ interface GalleryTestHooks {
     // top-level keydown handler can drive ArrowUp/ArrowDown comment-list
     // navigation through the same highlight machinery (qh9) that hover uses.
     var currentRegionState: RegionState | null = null;
+    var pendingSeenRequest: Promise<void> | null = null;
 
     applyTheme(currentTheme, false);
     initServerStatusBanner();
@@ -584,8 +585,12 @@ interface GalleryTestHooks {
     }
 
     function completeSession() {
-        fetch("/api/done", { method: "POST" })
-            .then(requireOkResponse)
+        var seenRequest = isDetail ? markCurrentUnitSeen() : Promise.resolve();
+        seenRequest
+            .then(function () {
+                return fetch("/api/done", { method: "POST" })
+                    .then(requireOkResponse);
+            })
             .then(function () {
                 setServerReachable(true);
                 window.close();
@@ -601,6 +606,40 @@ interface GalleryTestHooks {
             .catch(function () {
                 showServerDown("Bugshot server is unreachable. Review was not marked complete.");
             });
+    }
+
+    function markCurrentUnitSeen(): Promise<void> {
+        if (!isDetail || !currentUnit) {
+            return Promise.resolve();
+        }
+        if (pendingSeenRequest) {
+            return pendingSeenRequest;
+        }
+
+        pendingSeenRequest = fetch("/api/review-state", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ unit_id: currentUnit.id, seen: true }),
+            keepalive: true,
+        })
+            .then(requireOkResponse)
+            .then(function () {
+                setServerReachable(true);
+            })
+            .catch(function (error) {
+                showServerDown("Bugshot server is unreachable. Review progress was not saved.");
+                throw error;
+            })
+            .then(
+                function () {
+                    pendingSeenRequest = null;
+                },
+                function (error) {
+                    pendingSeenRequest = null;
+                    throw error;
+                }
+            );
+        return pendingSeenRequest;
     }
 
     function initIndex() {
@@ -2051,6 +2090,9 @@ interface GalleryTestHooks {
         var nextSlot = document.getElementById("next-slot");
         var indexButton = document.getElementById("index-btn");
         var copyFilenameButton = document.getElementById("copy-filename-btn");
+
+        markCurrentUnitSeen().catch(function () {
+        });
 
         currentUnit.assets.forEach(function (asset) {
             assetsContainer.appendChild(createAssetCard(asset));
