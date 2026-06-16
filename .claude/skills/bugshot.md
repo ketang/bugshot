@@ -26,8 +26,8 @@ against the baseline instead.
    Recognized extensions are defined in `gallery_server.py:IMAGE_EXTENSIONS` and
    `ANSI_EXTENSION` (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.ansi`).
 
-   The canonical producer-facing input format is documented in
-   `docs/specs/2026-04-24-review-units.md`.
+   The canonical producer-facing input format is documented at the plugin root:
+   `{{bugshot_dir}}/docs/specs/2026-04-24-review-units.md`.
 
    Grouped units may include `bugshot-unit.json` to set the display label,
    explicit asset/metadata ordering, and optional per-asset tooltips through
