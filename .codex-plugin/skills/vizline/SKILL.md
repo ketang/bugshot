@@ -41,8 +41,8 @@ The target project must ship `.agent-plugins/bento/bugshot/viz/capture-command`
 (executable). Optional companions: `should-baseline` (policy gate) and
 `ephemeral-root` (temporary worktree placement for `--from-base-ref`).
 
-The full contract is documented in
-`docs/specs/2026-04-25-vizdiff-vizline-design.md`.
+The full contract is documented at the plugin root:
+`{{vizline_dir}}/docs/specs/2026-04-25-vizdiff-vizline-design.md`.
 
 ## Startup
 

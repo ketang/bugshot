@@ -39,8 +39,8 @@ Skip when:
   create one with vizline's explicit `--from-base-ref` mode so the baseline
   comes from the base ref, not from modified HEAD.
 - For manifest mode, none of the capture prerequisites are required. The
-  manifest contract is documented in
-  `docs/specs/2026-05-01-vizdiff-manifest.md`.
+  manifest contract is documented at the plugin root:
+  `{{vizdiff_dir}}/docs/specs/2026-05-01-vizdiff-manifest.md`.
 
 ## Startup
 
