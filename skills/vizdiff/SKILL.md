@@ -4,7 +4,7 @@ description: TRIGGER at handoff or before landing when `.bugshot/baseline/manife
 arguments:
   - name: feature_worktree
     description: Path to the feature worktree to diff
-    required: true
+    required: false
 ---
 
 # Vizdiff — Bugshot Visual Diff Skill
